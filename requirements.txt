@@ -1,0 +1,36 @@
+# Requirements for Climate Processing Standalone Script
+# Core scientific computing
+numpy>=1.21.0
+xarray>=2022.3.0
+dask[complete]>=2022.5.0
+netcdf4>=1.6.0
+h5netcdf>=1.0.0
+
+# Distributed computing
+distributed>=2022.5.0
+
+# System monitoring and utilities
+psutil>=5.8.0
+
+# Optional but recommended for better performance
+scipy>=1.8.0
+bottleneck>=1.3.0
+numba>=0.56.0
+
+# For coordinate transformations (if needed)
+pyproj>=3.3.0
+
+# For time handling
+cftime>=1.6.0
+
+# For progress bars and diagnostics
+tqdm>=4.64.0
+
+# For configuration management (optional)
+pyyaml>=6.0
+configparser>=5.2.0
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0 
