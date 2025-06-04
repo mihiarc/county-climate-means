@@ -2,8 +2,8 @@
 """
 Guam & Northern Mariana Islands Climate Normals Processing Pipeline - Multiprocessing Version
 
-Specialized script for processing temperature variables (tas, tasmax, tasmin) for GU region.
-Processes all three variables simultaneously with parallel processing.
+Specialized script for processing climate variables (pr, tas, tasmax, tasmin) for GU region.
+Processes all four variables simultaneously with parallel processing.
 """
 
 import logging
@@ -32,13 +32,13 @@ from utils.time_handling import handle_time_coordinates, extract_year_from_filen
 # Configuration for Guam climate processing
 INPUT_DATA_DIR = "/media/mihiarc/RPA1TB/data/NorESM2-LM"
 OUTPUT_BASE_DIR = "output/guam_normals"
-VARIABLES = ['tas', 'tasmax', 'tasmin']  # All temperature variables
+VARIABLES = ['pr', 'tas', 'tasmax', 'tasmin']  # All climate variables
 REGION = 'GU'  # Guam and Northern Mariana Islands
 MIN_YEARS_FOR_NORMAL = 25
 
 # Performance configuration
-MAX_CORES = 6
-CORES_PER_VARIABLE = 2   # 2 cores per variable (3 variables = 6 total)
+MAX_CORES = 8
+CORES_PER_VARIABLE = 2   # 2 cores per variable (4 variables = 8 total)
 BATCH_SIZE_YEARS = 2     # Small batch sizes
 MAX_MEMORY_PER_PROCESS_GB = 4
 MEMORY_CHECK_INTERVAL = 10
