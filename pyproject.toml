@@ -1,0 +1,217 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "county-climate"
+version = "0.1.0"
+description = "County-level climate data processing package for means, metrics, and extremes analysis"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+maintainers = [
+    {name = "Your Name", email = "your.email@example.com"},
+]
+keywords = ["climate", "county", "normals", "metrics", "extremes", "climate-change", "cmip6", "nex-gddp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+requires-python = ">=3.9"
+
+# Core dependencies - absolutely required
+dependencies = [
+    "numpy>=1.21.0",
+    "xarray>=2022.3.0",
+    "netcdf4>=1.6.0",
+    "pandas>=1.4.0",
+    "psutil>=5.8.0",
+    "pathlib-ng>=1.0.0; python_version<'3.11'",  # pathlib improvements for older Python
+]
+
+# Optional dependencies for different use cases
+[project.optional-dependencies]
+# Performance enhancements
+performance = [
+    "dask[complete]>=2022.5.0",
+    "distributed>=2022.5.0",
+    "bottleneck>=1.3.0",
+    "numba>=0.56.0",
+    "scipy>=1.8.0",
+]
+
+# Geospatial functionality
+geospatial = [
+    "pyproj>=3.3.0",
+    "rasterio>=1.3.0",
+    "geopandas>=0.12.0",
+    "cartopy>=0.21.0",
+]
+
+# Visualization capabilities
+visualization = [
+    "matplotlib>=3.5.0",
+    "seaborn>=0.11.0",
+    "plotly>=5.0.0",
+    "bokeh>=2.4.0",
+]
+
+# Modern interface and user experience
+interface = [
+    "rich>=12.0.0",
+    "typer>=0.7.0",
+    "pydantic>=1.10.0",
+    "tqdm>=4.64.0",
+]
+
+# Time handling enhancements
+time = [
+    "cftime>=1.6.0",
+    "h5netcdf>=1.0.0",
+]
+
+# Configuration management
+config = [
+    "pyyaml>=6.0",
+    "toml>=0.10.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "flake8>=5.0.0",
+    "mypy>=0.991",
+    "pre-commit>=2.20.0",
+]
+
+# Documentation
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "myst-parser>=0.18.0",
+    "sphinx-autodoc-typehints>=1.19.0",
+]
+
+# All optional dependencies combined
+all = [
+    "climate-means[performance,geospatial,visualization,interface,time,config]"
+]
+
+# Entry points for command-line tools
+[project.scripts]
+county-climate = "county_climate:main"
+climate-means = "county_climate.means.cli:main"
+climate-metrics = "county_climate.metrics.main:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/climate-means"
+Documentation = "https://climate-means.readthedocs.io"
+Repository = "https://github.com/yourusername/climate-means.git"
+"Bug Tracker" = "https://github.com/yourusername/climate-means/issues"
+Changelog = "https://github.com/yourusername/climate-means/blob/main/CHANGELOG.md"
+
+# Hatchling configuration
+[tool.hatch.version]
+path = "county_climate/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["county_climate"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/county_climate",
+    "/tests",
+    "/docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+]
+
+# Development tools configuration
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["means"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["means"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "xarray.*",
+    "netcdf4.*",
+    "dask.*",
+    "psutil.*",
+]
+ignore_missing_imports = true 

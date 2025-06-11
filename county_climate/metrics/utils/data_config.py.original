@@ -1,0 +1,208 @@
+"""
+Simple data configuration for climate metrics processing.
+
+This replaces complex file discovery with explicit configuration that maps
+directly to the actual data structure on disk.
+"""
+
+import os
+import glob
+from typing import Dict, List, Tuple, Optional
+
+
+# Data configuration - maps directly to actual file structure
+DATA_CONFIG = {
+    'base_path': '/home/mihiarc/repos/county_climate_means/output/data',
+    'regions': {
+        'CONUS': {
+            'name': 'Continental United States',
+            'counties': 3114,
+            'path': 'CONUS'
+        },
+        'AK': {
+            'name': 'Alaska', 
+            'counties': 30,
+            'path': 'AK'
+        },
+        'HI': {
+            'name': 'Hawaii',
+            'counties': 5, 
+            'path': 'HI'
+        },
+        'PRVI': {
+            'name': 'Puerto Rico and Virgin Islands',
+            'counties': 81,
+            'path': 'PRVI'
+        },
+        'GU': {
+            'name': 'Guam and Northern Mariana Islands',
+            'counties': 5,
+            'path': 'GU'
+        }
+    },
+    'variables': ['pr', 'tas', 'tasmin', 'tasmax'],
+    'scenarios': {
+        'historical': {
+            'name': 'Historical',
+            'pattern': '*_historical_*',
+            'years': range(1950, 2015)  # 1950-2014
+        },
+        'ssp245': {
+            'name': 'SSP245',  
+            'pattern': '*_ssp245_*',
+            'years': range(2015, 2101)  # 2015-2100
+        },
+        'ssp585': {
+            'name': 'SSP585',
+            'pattern': '*_ssp585_*', 
+            'years': range(2015, 2101)  # 2015-2100
+        }
+    }
+}
+
+
+def get_data_files(region: str, variable: str, base_path: Optional[str] = None) -> List[Tuple[int, str, str]]:
+    """
+    Get list of data files for a region/variable combination.
+    
+    Args:
+        region: Region code (CONUS, AK, HI, PRVI, GU)
+        variable: Variable name (pr, tas, tasmin, tasmax)  
+        base_path: Override base path (optional)
+        
+    Returns:
+        List of (year, scenario, filepath) tuples
+    """
+    if base_path is None:
+        base_path = DATA_CONFIG['base_path']
+        
+    # Build path: {base_path}/{region}/{variable}/*.nc
+    region_path = DATA_CONFIG['regions'][region]['path']
+    data_dir = os.path.join(base_path, region_path, variable)
+    
+    if not os.path.exists(data_dir):
+        print(f"Warning: Data directory not found: {data_dir}")
+        return []
+        
+    # Get all NetCDF files
+    pattern = os.path.join(data_dir, "*.nc")
+    all_files = glob.glob(pattern)
+    
+    results = []
+    for filepath in all_files:
+        filename = os.path.basename(filepath)
+        
+        # Extract year from filename (handle both formats)
+        import re
+        # Try pattern with version first: _YYYY_v1.1_climatology.nc  
+        year_match = re.search(r'_(\d{4})_v[\d\.]+_climatology\.nc$', filename)
+        if not year_match:
+            # Try pattern without version: _YYYY_climatology.nc
+            year_match = re.search(r'_(\d{4})_climatology\.nc$', filename)
+            
+        if not year_match:
+            continue
+            
+        year = int(year_match.group(1))
+        
+        # Determine scenario from filename
+        scenario = None
+        for scen_key, scen_config in DATA_CONFIG['scenarios'].items():
+            if scen_key in filename:
+                scenario = scen_key
+                break
+                
+        if scenario is None:
+            print(f"Warning: Could not determine scenario for {filename}")
+            continue
+            
+        results.append((year, scenario, filepath))
+    
+    # Sort by year
+    results.sort(key=lambda x: x[0])
+    return results
+
+
+def filter_files_by_scenario(files: List[Tuple[int, str, str]], scenario: str) -> List[Tuple[int, str, str]]:
+    """Filter file list to specific scenario."""
+    return [(year, scen, path) for year, scen, path in files if scen == scenario]
+
+
+def filter_files_by_year_range(files: List[Tuple[int, str, str]], start_year: int, end_year: int) -> List[Tuple[int, str, str]]:
+    """Filter file list to specific year range."""
+    return [(year, scen, path) for year, scen, path in files if start_year <= year <= end_year]
+
+
+def get_available_years(region: str, variable: str, scenario: Optional[str] = None) -> List[int]:
+    """Get list of available years for region/variable/scenario."""
+    files = get_data_files(region, variable)
+    
+    if scenario:
+        files = filter_files_by_scenario(files, scenario)
+        
+    return sorted(list(set(year for year, _, _ in files)))
+
+
+def validate_data_availability(region: str, variable: str, scenario: str, year: int) -> bool:
+    """Check if specific data file exists."""
+    files = get_data_files(region, variable)
+    
+    for file_year, file_scenario, filepath in files:
+        if file_year == year and file_scenario == scenario:
+            return os.path.exists(filepath)
+            
+    return False
+
+
+def get_data_summary() -> Dict:
+    """Get summary of all available data."""
+    summary = {
+        'regions': len(DATA_CONFIG['regions']),
+        'variables': len(DATA_CONFIG['variables']),
+        'scenarios': len(DATA_CONFIG['scenarios']),
+        'details': {}
+    }
+    
+    for region in DATA_CONFIG['regions']:
+        summary['details'][region] = {}
+        for variable in DATA_CONFIG['variables']:
+            files = get_data_files(region, variable)
+            summary['details'][region][variable] = {
+                'total_files': len(files),
+                'scenarios': list(set(scen for _, scen, _ in files)),
+                'year_range': (min(year for year, _, _ in files) if files else None,
+                              max(year for year, _, _ in files) if files else None)
+            }
+    
+    return summary
+
+
+def print_data_summary():
+    """Print comprehensive data availability summary."""
+    print("=" * 60)
+    print("CLIMATE DATA AVAILABILITY SUMMARY")
+    print("=" * 60)
+    
+    summary = get_data_summary()
+    
+    print(f"Base path: {DATA_CONFIG['base_path']}")
+    print(f"Regions: {summary['regions']}")
+    print(f"Variables: {summary['variables']}") 
+    print(f"Scenarios: {summary['scenarios']}")
+    print()
+    
+    total_files = 0
+    for region, region_data in summary['details'].items():
+        region_info = DATA_CONFIG['regions'][region]
+        print(f"{region}: {region_info['name']} ({region_info['counties']} counties)")
+        
+        for variable, var_data in region_data.items():
+            total_files += var_data['total_files']
+            year_range = var_data['year_range']
+            year_str = f"{year_range[0]}-{year_range[1]}" if year_range[0] else "No data"
+            scenarios_str = ", ".join(var_data['scenarios'])
+            
+            print(f"  {variable}: {var_data['total_files']} files ({year_str}) - {scenarios_str}")
+        print()
+        
+    print(f"Total files: {total_files:,}") 

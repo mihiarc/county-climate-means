@@ -1,0 +1,207 @@
+site_name: Climate Means Documentation
+site_description: Comprehensive documentation for the climate means processing system
+site_author: Climate Research Team
+site_url: https://climate-means.readthedocs.io
+
+# Repository configuration
+repo_name: county_climate_means
+repo_url: https://github.com/mihiarc/county_climate_means
+edit_uri: edit/main/docs/
+
+# Configuration
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  
+  features:
+    # Navigation (tabs disabled for single sidebar)
+    # - navigation.tabs
+    # - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    
+    # Search
+    - search.suggest
+    - search.highlight
+    - search.share
+    
+    # Header
+    - header.autohide
+    
+    # Content
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tooltips
+    - content.tabs.link
+    
+    # Repository
+    - content.action.edit
+    - content.action.view
+    
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+      htmlmin_opts:
+        remove_comments: true
+      cache_safe: true
+  - git-revision-date-localized:
+      type: datetime
+      enable_creation_date: true
+      fallback_to_build_date: true
+  # - git-committers:
+  #     repository: mihiarc/county_climate_means
+  #     branch: main
+  - tags
+
+# Extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: On this page
+  
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Extra configuration
+extra:
+  version:
+    provider: mike
+    default: latest
+  
+  # Analytics
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >-
+            Thanks for your feedback! Help us improve this page by
+            <a href="https://github.com/mihiarc/county_climate_means/issues/new/?title=[Feedback]+{title}+-+{url}" target="_blank" rel="noopener">telling us what you found useful or what could be improved</a>.
+  
+  # Social
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mihiarc/county_climate_means
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/climate-means/
+    - icon: fontawesome/solid/paper-plane
+      link: mailto:your-email@domain.com
+
+# Navigation - All documents in one flat structure
+nav:
+  - Home: index.md
+  - Methods & Business Logic: METHODS.md
+  - Core API Reference: api/core.md
+  - CRS Handling: CRS_HANDLING_DOCUMENTATION.md
+  - Pipeline Usage Guide: PIPELINE_USAGE_GUIDE.md
+  - Scaling Analysis: SCALING_ANALYSIS.md
+
+# Watch files for development
+watch:
+  - means/
+  - docs/
+
+# Extra CSS and JS - Commented out files that don't exist
+# extra_css:
+#   - stylesheets/extra.css
+
+# extra_javascript:
+#   - javascripts/extra.js
+#   - javascripts/mathjax.js
+
+# MathJax support (keeping only CDN links that work)
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Build settings
+strict: false
+use_directory_urls: true
+
+# AI Compatibility Features (2025)
+# Support for LLM ingestion via /llms.txt endpoint
+# hooks:
+#   - docs/hooks/llms_txt_generator.py
+
+# Additional features for modern documentation
+copyright: >
+  Copyright &copy; 2025 Climate Research Team –
+  <a href="#__consent">Change cookie settings</a>
+
+# Footer
+site_dir: site 
