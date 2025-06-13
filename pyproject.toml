@@ -37,7 +37,13 @@ dependencies = [
     "netcdf4>=1.6.0",
     "pandas>=1.4.0",
     "psutil>=5.8.0",
-    "pathlib-ng>=1.0.0; python_version<'3.11'",  # pathlib improvements for older Python
+    "pyyaml>=6.0",
+    "rich>=12.0.0",          # Required for progress tracking
+    "pydantic>=2.0.0",       # Required for data validation
+    "geopandas>=0.12.0",     # Required for county processing
+    "pyproj>=3.3.0",         # Required for CRS handling
+    "matplotlib>=3.5.0",     # Required for visualization
+    "aiofiles>=23.0.0",      # Required for async file operations
 ]
 
 # Optional dependencies for different use cases
@@ -69,10 +75,9 @@ visualization = [
 
 # Modern interface and user experience
 interface = [
-    "rich>=12.0.0",
     "typer>=0.7.0",
-    "pydantic>=1.10.0",
     "tqdm>=4.64.0",
+    "click>=8.0.0",
 ]
 
 # Time handling enhancements
@@ -89,14 +94,22 @@ config = [
 
 # Development dependencies
 dev = [
+    # All optional dependencies for full feature development
+    "county-climate[performance,geospatial,visualization,interface,time,config]",
+    # Testing
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
+    "pytest-asyncio>=0.21.0",
+    # Code quality
     "black>=22.0.0",
     "isort>=5.10.0",
     "flake8>=5.0.0",
     "mypy>=0.991",
     "pre-commit>=2.20.0",
+    # Jupyter support for development
+    "jupyter>=1.0.0",
+    "ipykernel>=6.0.0",
 ]
 
 # Documentation
@@ -109,7 +122,7 @@ docs = [
 
 # All optional dependencies combined
 all = [
-    "climate-means[performance,geospatial,visualization,interface,time,config]"
+    "county-climate[performance,geospatial,visualization,interface,time,config]"
 ]
 
 # Entry points for command-line tools
@@ -174,6 +187,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "asyncio: marks tests as asyncio",
+]
 
 [tool.coverage.run]
 source = ["means"]

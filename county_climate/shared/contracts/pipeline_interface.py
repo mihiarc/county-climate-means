@@ -198,7 +198,7 @@ class ErrorContract(BaseModel):
     resolution_notes: Optional[str] = Field(None, description="Resolution notes")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "error_id": "err_20240115_143022_001",
                 "pipeline_id": "climate_means_v1",
@@ -292,7 +292,7 @@ class HealthCheckContract(BaseModel):
         return self.overall_status in [HealthStatus.DEGRADED, HealthStatus.UNHEALTHY]
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "pipeline_id": "climate_means_v1",
                 "overall_status": "healthy",

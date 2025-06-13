@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 import logging
 
-from means.output.catalog import ClimateDataCatalog, CatalogManager
-from means.output.organization import OutputOrganizer
-from means.core.regions import REGION_BOUNDS
-from means.config import get_config
+from county_climate.means.output.catalog import ClimateDataCatalog, CatalogManager
+from county_climate.means.output.organization import OutputOrganizer
+from county_climate.means.core.regions import REGION_BOUNDS
+from county_climate.means.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,7 @@ class PipelineInterface:
         return {
             "python_api": """
 # Load climate means catalog
-from means.output.catalog import ClimateDataCatalog
+from county_climate.means.output.catalog import ClimateDataCatalog
 catalog = ClimateDataCatalog('output/catalog/climate_means_catalog.yaml')
 
 # Find SSP245 temperature data for 2050s
@@ -279,7 +279,7 @@ for dataset in datasets:
             "command_line": """
 # Use pipeline interface
 python -c "
-from means.pipeline import PipelineInterface
+from county_climate.means.pipeline import PipelineInterface
 interface = PipelineInterface()
 config = interface.create_downstream_config('climate_extremes')
 config.save('extremes_config.yaml')

@@ -4,206 +4,178 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **climate means calculation component** of a larger climate data processing pipeline. It specifically calculates 30-year climate normals (rolling averages) from NEX-GDDP-CMIP6 NorESM2-LM climate model data. The system processes basic climate variables (precipitation and temperature) across multiple U.S. regions (CONUS, Alaska, Hawaii, Puerto Rico, Guam) with optimized multiprocessing capabilities.
+County Climate is a sophisticated Python package for processing climate data and calculating 30-year climate normals from NEX-GDDP-CMIP6 climate model data. It supports county-level climate analysis across multiple U.S. regions with both means (normals) and metrics (statistics) calculations.
 
-**Note**: This package handles climate means only. Climate metrics and extremes are calculated in a separate downstream package that uses the outputs from this system.
+## Architecture
 
-## Key Commands
+The project follows a modular, pipeline-based architecture:
 
-### Development Setup
+- **county_climate.means**: Climate normals (30-year averages) processing
+- **county_climate.metrics**: County-level climate statistics and extremes  
+- **county_climate.shared**: Shared infrastructure, contracts, and orchestration
+
+Key design patterns:
+- Staged pipeline processing with Pydantic data contracts
+- Configuration-driven orchestration (YAML-based)
+- Multiprocessing support optimized for high-memory systems (95GB/56 cores)
+- Rich progress tracking with real-time system stats
+
+## Common Commands
+
+### Running the Pipeline
+
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-# OR for full development setup
-pip install -e .[dev]
-```
+# Run complete pipeline with configuration
+python main_orchestrated.py run --config configs/production_high_performance.yaml
 
-### Running the System
-```bash
-# Main CLI entry point
-python main.py --help
+# Run pipeline with validation (Phase 3)
+python main_orchestrated.py run --config configs/production_with_validation.yaml
 
-# Process all regions and variables
-python main.py process-all
+# Validate configuration
+python main_orchestrated.py validate --config configs/test_integration.yaml
 
-# Process specific region
-python main.py process-region CONUS --variables pr tas
+# Check system status
+python main_orchestrated.py status
 
-# Benchmark performance
-python main.py benchmark --num-files 10
+# Create sample configurations
+python main_orchestrated.py create-configs --output-dir configs/
 
-# Monitor progress
-python main.py monitor
+# List available configurations
+python main_orchestrated.py list-configs
 
-# Show system status
-python main.py status
+# Convert county boundaries to modern format
+python scripts/convert_county_boundaries.py
 ```
 
 ### Testing
+
 ```bash
-# Run tests (based on pyproject.toml config)
+# Run all tests
 pytest
-pytest tests/
-pytest tests/test_specific_file.py
 
 # Run with coverage
-pytest --cov=means
+pytest --cov=county_climate
 
+# Run specific test file
+pytest tests/test_end_to_end_pipeline.py
+
+# Run tests matching pattern
+pytest -k "test_pipeline"
+```
+
+### Code Quality
+
+```bash
 # Format code
-black means/
-isort means/
+black county_climate/
+
+# Sort imports
+isort county_climate/
 
 # Type checking
-mypy means/
+mypy county_climate/
+
+# Linting
+flake8 county_climate/
 ```
 
-## Architecture Overview
+### Development Installation
 
-This codebase represents a sophisticated, production-ready system that was successfully refactored from standalone regional scripts into a unified Python package following modern software engineering practices.
-
-### Package Structure
-- `means/` - Main Python package following clean architecture principles
-  - `core/` - Business logic and domain models
-    - `regional_climate_processor.py` - Unified processor with factory pattern
-    - `multiprocessing_engine.py` - Advanced parallel processing with resource management
-    - `regions.py` - Region definitions and coordinate handling
-    - `maximum_processor.py` - Specialized maximum value processing
-  - `utils/` - Shared utilities and infrastructure
-    - `io_util.py` - NetCDF file handling and NorESM2 data structures
-    - `rich_progress.py` - Modern terminal UI with real-time system monitoring
-    - `time_util.py` - Temporal data processing utilities
-  - `validation/` - Data quality and validation modules
-  - `visualization/` - Plotting and data visualization capabilities
-  - `config.py` - Sophisticated configuration management with dataclasses
-
-### Architectural Patterns Used
-- **Factory Pattern**: `create_regional_processor()`, `create_multiprocessing_engine()`
-- **Strategy Pattern**: Different processing approaches for historical/hybrid/future periods
-- **Configuration Object Pattern**: Centralized, hierarchical configuration with YAML support
-- **Protocol Pattern**: `TaskProtocol` for extensible multiprocessing tasks
-- **Builder Pattern**: Rich progress tracker with customizable display components
-
-### Key Processing Flow (Climate Means Pipeline)
-1. **Configuration Management**: Dataclass-based config with environment variable support
-2. **NorESM2FileHandler**: NetCDF file discovery with metadata extraction and validation
-3. **RegionalClimateProcessor**: Unified processor supporting all regions/variables via factory pattern
-4. **MultiprocessingEngine**: Protocol-based parallel processing with automatic resource optimization
-5. **RichProgressTracker**: Real-time monitoring with hierarchical task organization and system stats
-
-**Output**: 30-year climate normal NetCDF files that serve as input to downstream climate metrics and extremes processing.
-
-### Data Processing Types (Internal to Climate Means Stage)
-- **Historical**: 1980-2014 (historical data only)
-- **Hybrid**: 2015-2044 (historical + SSP245 scenario)
-- **Future**: 2045-2100 (SSP245 scenario only)
-
-**Note**: These processing types are internal to the climate means calculation. The downstream pipeline receives data indexed by final scenario (historical, ssp245, ssp585) and year, regardless of how it was processed internally.
-
-### Supported Variables (Climate Means Only)
-- `pr` - Precipitation (kg m⁻² s⁻¹)
-- `tas` - Near-surface air temperature (K)  
-- `tasmax` - Daily maximum temperature (K)
-- `tasmin` - Daily minimum temperature (K)
-
-**Note**: This system calculates 30-year rolling averages for these variables. Climate extremes and derived metrics are calculated in a separate downstream package.
-
-### Supported Regions
-- `CONUS` - Continental United States
-- `AK` - Alaska
-- `HI` - Hawaii
-- `PRVI` - Puerto Rico & Virgin Islands
-- `GU` - Guam & Northern Mariana Islands
-
-## Configuration
-
-The system uses `climate_config.yaml` for configuration. Create with:
 ```bash
-python main.py create-config
+# Install with all dependencies
+pip install -e .[all]
+
+# Development installation
+pip install -e .[dev]
 ```
 
-Key config sections:
-- `paths`: Input/output directories
-- `processing`: Multiprocessing settings, memory limits
-- `regions`: Regional processing parameters
+## Pipeline Stages
 
-## Performance Optimization
+1. **Stage 1: Climate Means Processing**
+   - Calculates 30-year climate normals
+   - Variables: pr, tas, tasmax, tasmin
+   - Regions: CONUS, Alaska, Hawaii, PRVI, Guam
+   - Scenarios: historical, ssp245, ssp585
 
-### Multiprocessing Settings
-- **Optimal workers**: 6 (tested optimal for this system)
-- **Memory limit**: 4GB per process
-- **Batch size**: 2 years at a time
-- **Expected speedup**: 4.3x over sequential processing
+2. **Stage 2: Climate Metrics**
+   - County-level statistics (mean, std, min, max, percentiles)
+   - Area-weighted aggregation
+   - Uses modern GeoParquet format for county boundaries
 
-### Memory Management
-- Automatic garbage collection between files
-- Process memory monitoring with psutil
-- Configurable memory limits per worker
+3. **Stage 3: Validation (QA/QC)**
+   - Comprehensive quality assurance and control
+   - Validators:
+     - **QAQCValidator**: Data completeness, temporal/spatial consistency, logical relationships
+     - **SpatialOutliersValidator**: Geographic outlier detection using IQR, Z-score methods
+     - **PrecipitationValidator**: Precipitation-specific data quality checks
+   - Visualization suite for analysis and reporting
+   - Generates quality scores and validation reports
 
-## Development Notes
+## Key Files and Entry Points
 
-### Entry Points & API Design
-- `main.py` - Primary CLI interface (external to package)
-- `means.process_region()` - High-level convenience function
-- `means.create_regional_processor()` - Factory function for custom configurations
-- `means.core.regional_climate_processor.RegionalClimateProcessor` - Main processing class
-- Legacy standalone scripts have been successfully refactored into unified approach
+- `main_orchestrated.py`: Configuration-driven pipeline orchestrator
+- `run_complete_pipeline.py`: Direct pipeline execution
+- `configs/`: Pipeline configuration files
+- `county_climate/shared/contracts/`: Pydantic data contracts
+- `county_climate/shared/orchestration/`: Pipeline orchestration logic
 
-### Code Quality & Patterns
-- **Type hints** throughout codebase for better IDE support and maintainability
-- **Dataclass-based configuration** with validation and serialization
-- **Protocol-based multiprocessing** for extensibility
-- **Comprehensive logging** with multiple levels and file output
-- **Modern Python packaging** with pyproject.toml and optional dependencies
+## Configuration System
 
-### Error Handling Philosophy
-- Always look for root cause of errors (per .cursor/rules/rootcause.mdc)
-- **Graceful degradation** when optional features fail (e.g., Rich UI falls back to basic logging)
-- **Resource management** with proper cleanup and memory monitoring
-- **Restart functionality** - skips already processed files to enable resuming
-- **Timeout handling** in multiprocessing with configurable limits
+The project uses YAML configurations with:
+- Stage-specific resource allocation
+- Environment variable overrides
+- Multiple profiles (production, development, testing)
 
-### Progress Tracking Architecture
-- **Rich-based terminal UI** with real-time system monitoring
-- **Hierarchical task organization** with parent/child relationships
-- **Custom progress columns** for throughput, memory usage, and ETA
-- **JSON status files** for programmatic monitoring and external integration
-- **Processing summaries** with comprehensive timing and throughput metrics
+Example configuration structure:
+```yaml
+pipeline:
+  stages:
+    - name: "climate_means"
+      config:
+        num_processes: 56
+        enable_rich_progress: true
+```
 
-## Data Validation
+## Data Flow
 
-The system includes validation modules in `means/validation/`:
-- Region extent validation
-- Climate data alignment checks
-- Output quality verification
+1. **Input**: NEX-GDDP-CMIP6 NetCDF files by variable/scenario
+2. **Phase 1**: Regional extraction → 30-year normal calculation
+3. **Phase 2**: County aggregation → Metrics calculation
+4. **Phase 3**: QA/QC validation → Quality reports → Visualizations
+5. **Output**: NetCDF files with climate normals/metrics, CSV/Parquet exports, validation reports
 
-## Common Troubleshooting
+## County Boundaries
 
-### Memory Issues
-- Reduce `cores_per_variable` or `max_workers` in config
-- Increase `max_memory_per_process_gb` if system has more RAM  
-- Check memory usage with `python main.py status`
-- Monitor real-time memory usage through Rich progress display
+The project now uses modern GeoParquet format for county boundaries:
+- Centralized management via `CountyBoundariesManager`
+- Automatic conversion from shapefile on first use
+- Optimized versions for different phases
+- Located in `county_climate/data/`
 
-### Performance Issues
-- Run benchmark: `python main.py benchmark`
-- Check optimal worker count for your system (default 6 workers tested optimal)
-- Verify SSD storage for NetCDF I/O performance
-- Use `batch_size_years` to control memory vs speed tradeoff
+## Testing Approach
 
-### Configuration Issues
-- Validate config with `python main.py status`
-- Create sample config: `python main.py create-config`
-- Check environment variables override YAML settings
-- Ensure output directories have write permissions
+- **Framework**: pytest with asyncio support
+- **Key test files**:
+  - `test_end_to_end_pipeline.py`: Full pipeline integration
+  - `test_config_integration.py`: Configuration system
+  - `test_contracts.py`: Data contracts validation
 
-### Data Issues
-- Validate input data availability: `python main.py status`
-- Check region bounds with validation modules in `means/validation/`
-- Verify NetCDF file structure with NorESM2FileHandler
-- Look for coordinate system issues (0-360 vs -180-180 longitude)
+## Performance Considerations
 
-### Multiprocessing Issues
-- Check available CPU cores and memory
-- Reduce worker count if seeing timeout errors
-- Verify process cleanup with system monitoring
-- Use `safe_mode` in configuration for debugging
+- Multiprocessing optimized for 56 cores/95GB RAM systems
+- Memory-aware processing with configurable limits
+- Rich progress tracking enabled by default (disable with `enable_rich_progress: false`)
+
+## Regional Processing
+
+Special handling for:
+- Alaska: Dateline coordinate wrapping
+- Hawaii/PRVI/Guam: Island-specific bounds
+- CONUS: Continental US processing
+
+## Cursor Rules
+
+When working in this codebase:
+1. Always look for root causes of errors ("Let me find the root cause...")
+2. Explain logic clearly ("Here is my logic:")
+3. Use teacher mode when solving problems ("Teacher mode:")

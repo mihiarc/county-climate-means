@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import logging
 
-from means.output.catalog import ClimateDataCatalog, CatalogManager
-from means.pipeline.interface import PipelineInterface, DownstreamConfig
+from county_climate.means.output.catalog import ClimateDataCatalog, CatalogManager
+from county_climate.means.pipeline.interface import PipelineInterface, DownstreamConfig
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +221,7 @@ from pathlib import Path
 # Add climate-means to Python path if needed
 # sys.path.insert(0, '/path/to/climate-means')
 
-from means.output.catalog import ClimateDataCatalog
+from county_climate.means.output.catalog import ClimateDataCatalog
 
 
 def load_climate_means_catalog():
@@ -333,7 +333,7 @@ with open('{target_pipeline}_config.yaml', 'r') as f:
 
 ### 2. Access Data Catalog
 ```python
-from means.output.catalog import ClimateDataCatalog
+from county_climate.means.output.catalog import ClimateDataCatalog
 catalog = ClimateDataCatalog('climate_means_catalog.yaml')
 
 # Get available scenarios and years

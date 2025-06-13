@@ -1,0 +1,266 @@
+pipeline_id: "complete_all_regions"
+pipeline_name: "Complete Climate Processing - All Variables & Regions"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/logs/complete_pipeline.log"
+
+# Resource limits optimized for your 95GB RAM / 56 core system
+global_resource_limits:
+  max_memory_gb: 90.0      # Leave some headroom
+  max_cpu_cores: 52        # Leave some cores for system
+  max_processing_time_hours: 48.0  # Allow 2 days for complete processing
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  debug_mode: false
+  enable_profiling: false
+  save_intermediate_results: false
+  fast_mode: false
+
+# Pipeline stages
+stages:
+  # Phase 1: Climate Means Processing
+  - stage_id: "climate_means_all"
+    stage_type: "means"
+    stage_name: "Climate Means Processing - All Regions & Variables"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource allocation for means processing
+    resource_limits:
+      max_memory_gb: 80.0
+      max_cpu_cores: 48
+      max_processing_time_hours: 36.0
+      priority: 10
+    
+    # Retry configuration
+    retry_attempts: 3
+    retry_delay_seconds: 300
+    
+    # Stage configuration - process everything
+    stage_config:
+      # All climate variables
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # All US regions
+      regions: ["CONUS", "AK", "HI", "PRVI", "GU"]
+      
+      # All scenarios
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Processing parameters optimized for high performance
+      multiprocessing_workers: 12  # 3 workers per variable
+      batch_size_years: 2          # Process 2 years at a time
+      max_memory_per_worker_gb: 6.0
+      
+      # Enable parallel processing for maximum speed
+      enable_parallel_regions: true
+      enable_parallel_variables: true
+      max_parallel_regions: 2      # Process 2 regions simultaneously
+      max_parallel_variables: 2    # Process 2 variables simultaneously
+      
+      # Quality control
+      enable_quality_checks: true
+      enable_debug_output: false
+      save_intermediate_files: false
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      
+      # Processing years
+      historical_years: [1950, 2014]
+      future_years: [2015, 2100]
+      
+      # Enable progress tracking
+      enable_rich_progress: true
+      progress_update_interval: 60  # Update every minute
+
+  # Phase 2: County Metrics Processing
+  - stage_id: "county_metrics_all"
+    stage_type: "metrics"
+    stage_name: "County Metrics Processing - All Variables & Regions"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    depends_on: ["climate_means_all"]
+    trigger_type: "dependency"
+    
+    # Resource allocation for metrics
+    resource_limits:
+      max_memory_gb: 40.0
+      max_cpu_cores: 24
+      max_processing_time_hours: 12.0
+      priority: 8
+    
+    # Retry configuration
+    retry_attempts: 2
+    retry_delay_seconds: 120
+    
+    # Stage configuration
+    stage_config:
+      # Process all variables
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # Process all regions
+      regions: ["CONUS", "AK", "HI", "PRVI", "GU"]
+      
+      # All scenarios
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Calculate comprehensive metrics
+      metrics: ["mean", "std", "min", "max"]
+      percentiles: [10, 25, 50, 75, 90]  # More detailed percentiles
+      
+      # Processing parameters
+      multiprocessing_workers: 8
+      max_memory_per_worker_gb: 4.0
+      
+      # County filtering options
+      process_all_counties: true
+      filter_by_population: false
+      min_grid_points: 1  # Include counties with at least 1 grid point
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics"
+      output_formats: ["csv", "parquet", "netcdf"]  # Multiple output formats
+      
+      # Additional processing options
+      calculate_seasonal_metrics: true
+      seasons:
+        - name: "DJF"
+          months: [12, 1, 2]
+        - name: "MAM"
+          months: [3, 4, 5]
+        - name: "JJA"
+          months: [6, 7, 8]
+        - name: "SON"
+          months: [9, 10, 11]
+
+  # Phase 3: Validation and QC
+  - stage_id: "validation_qc"
+    stage_type: "validation"
+    stage_name: "QA/QC Validation"
+    package_name: "county_climate.validation.integration"
+    entry_point: "validation_stage_handler"
+    depends_on: ["county_metrics_all"]
+    trigger_type: "dependency"
+    
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 8
+      max_processing_time_hours: 2.0
+      priority: 5
+    
+    stage_config:
+      # Output directory for validation results
+      output_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/validation"
+      
+      # Validators to run
+      validators_to_run: ["qaqc", "spatial", "precipitation"]
+      
+      # Enable visualizations
+      run_visualizations: true
+      
+      # Validation configuration
+      validation_config:
+        # Data expectations
+        expected_counties: 3109
+        expected_scenarios: ["historical", "ssp245", "ssp585"]
+        
+        # Outlier detection thresholds
+        iqr_multiplier: 1.5
+        z_score_threshold: 3.0
+        modified_z_threshold: 3.5
+        
+        # Temporal consistency thresholds
+        max_year_to_year_temp_change: 5.0
+        max_year_to_year_precip_change: 500.0
+        
+        # Missing data thresholds
+        max_missing_overall: 5.0
+        max_missing_per_metric: 10.0
+        max_missing_per_county: 15.0
+        
+        # Output settings
+        save_plots: true
+        plot_dpi: 300
+        
+        # Validation modules
+        run_completeness_check: true
+        run_spatial_check: true
+        run_temporal_check: true
+        run_logical_check: true
+        run_plausibility_check: true
+        run_outlier_detection: true
+        run_visualization: true
+
+# Data flows between stages
+data_flows:
+  - flow_id: "means_to_metrics"
+    source_stage: "climate_means_all"
+    target_stage: "county_metrics_all"
+    flow_type: "file"
+    data_format: "netcdf"
+    enable_monitoring: true
+    validate_transfer: true
+    
+  - flow_id: "metrics_to_validation"
+    source_stage: "county_metrics_all"
+    target_stage: "validation_qc"
+    flow_type: "file"
+    data_format: "mixed"  # CSV, Parquet, NetCDF
+    enable_monitoring: true
+
+# Monitoring configuration
+enable_monitoring: true
+monitoring_interval_seconds: 60
+health_check_interval_seconds: 300
+enable_resource_monitoring: true
+enable_progress_tracking: true
+
+# Alert configuration
+enable_alerts: true
+alert_channels:
+  - type: "log"
+    level: "error"
+  - type: "file"
+    path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/alerts.log"
+    level: "warning"
+
+# Error handling
+global_retry_attempts: 3
+continue_on_stage_failure: false
+failure_recovery_mode: "checkpoint"  # Resume from last successful checkpoint
+
+# Performance optimization
+enable_caching: true
+cache_size_gb: 10.0
+enable_parallel_io: true
+io_buffer_size_mb: 256
+
+# Checkpointing
+enable_checkpointing: true
+checkpoint_interval_minutes: 30
+checkpoint_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/checkpoints"
+
+# Metadata
+description: |
+  Complete climate processing pipeline that processes all variables (pr, tas, tasmax, tasmin)
+  across all US regions (CONUS, Alaska, Hawaii, PRVI, Guam) for all scenarios
+  (historical, ssp245, ssp585). Includes both Phase 1 (30-year climate means) and
+  Phase 2 (county-level metrics) processing with comprehensive validation.
+  
+  Expected outputs:
+  - Phase 1: ~3,900 NetCDF files (4 vars × 5 regions × 3 scenarios × 65-150 years)
+  - Phase 2: ~3,900 metrics files × 3 formats = ~11,700 files
+  - Processing time: 24-48 hours on 95GB/56-core system
+  
+tags: ["production", "complete", "all-regions", "all-variables", "validated"]
+created_by: "climate_processing_team"
+created_date: "2025-01-10"

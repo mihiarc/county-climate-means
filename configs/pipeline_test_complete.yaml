@@ -1,0 +1,48 @@
+pipeline_id: "test_complete"
+pipeline_name: "Test Complete Pipeline"
+pipeline_version: "1.0.0"
+environment: "development"
+
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/tmp/test_complete.log"
+
+global_resource_limits:
+  max_memory_gb: 32.0
+  max_cpu_cores: 8
+  max_processing_time_hours: 2.0
+
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+
+stages:
+  - stage_id: "test_means"
+    stage_type: "means"
+    stage_name: "Test Climate Means"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler"
+    trigger_type: "manual"
+    
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 4
+      max_processing_time_hours: 1.0
+      priority: 10
+    
+    retry_attempts: 1
+    retry_delay_seconds: 30
+    
+    stage_config:
+      # Limited test configuration
+      variables: ["tas"]
+      regions: ["CONUS"]
+      scenarios: ["historical"]
+      
+      multiprocessing_workers: 4
+      batch_size_years: 2
+      max_memory_per_worker_gb: 3.0
+      
+      enable_rich_progress: true
+      
+      output_base_path: "/tmp/test_means_output"

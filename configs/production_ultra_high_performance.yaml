@@ -1,0 +1,185 @@
+pipeline_id: "production_ultra_high_performance"
+pipeline_name: "Ultra High Performance Climate Processing Pipeline"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths for your specific setup
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/var/log/climate/ultra_production.log"
+
+# Global resource limits optimized for 56-core, 92.9GB system
+global_resource_limits:
+  max_memory_gb: 85.0      # Leave 8GB for system
+  max_cpu_cores: 52        # Leave 4 cores for system
+  max_processing_time_hours: 24.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  climate_normals_period: 30
+  output_format: "netcdf4"
+  compression_level: 4
+  enable_caching: true
+  cache_directory: "/tmp/climate_cache"
+
+# Pipeline stages
+stages:
+  # Climate Means Processing Stage
+  - stage_id: "climate_means"
+    stage_type: "means"
+    stage_name: "Ultra High Performance Climate Means"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource limits for means processing
+    resource_limits:
+      max_memory_gb: 80.0     # High memory for large datasets
+      max_cpu_cores: 50       # Use most cores for parallel processing
+      max_processing_time_hours: 12.0
+      priority: 10
+    
+    # Retry configuration
+    retry_attempts: 3
+    retry_delay_seconds: 300  # 5 minutes between retries
+    
+    # Stage-specific configuration
+    stage_config:
+      # Variables to process
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # Regions to process  
+      regions: ["CONUS", "AK", "HI", "PRVI"]
+      
+      # Climate scenarios
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Processing parameters optimized for 56-core system with parallel variables
+      multiprocessing_workers: 48         # Use 48 cores for processing (12 per variable)
+      batch_size_years: 5                 # Smaller batches for better parallelization
+      max_memory_per_worker_gb: 1.6       # 48 * 1.6 = 77GB
+      
+      # Performance optimizations
+      enable_parallel_regions: true
+      enable_parallel_variables: true
+      max_parallel_regions: 4             # Process 4 regions simultaneously
+      max_parallel_variables: 4           # All 4 variables in parallel
+      
+      # Quality and validation
+      enable_quality_checks: true
+      min_data_completeness: 0.95
+      enable_coordinate_validation: true
+      
+      # Progress tracking
+      enable_rich_progress: true  # Beautiful real-time progress display
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/ultra_means"
+      create_summary_files: true
+      save_processing_metadata: true
+
+  # Climate Metrics Processing Stage  
+  - stage_id: "climate_metrics"
+    stage_type: "metrics"
+    stage_name: "Ultra Performance County Metrics"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    depends_on: ["climate_means"]
+    trigger_type: "dependency"
+    
+    # Resource limits for metrics processing
+    resource_limits:
+      max_memory_gb: 60.0     # Good memory for county processing
+      max_cpu_cores: 40       # High parallelization for counties
+      max_processing_time_hours: 8.0
+      priority: 8
+    
+    # Retry configuration
+    retry_attempts: 2
+    retry_delay_seconds: 180  # 3 minutes between retries
+    
+    # Stage-specific configuration
+    stage_config:
+      # Metrics to calculate
+      metrics: ["mean", "std", "min", "max", "percentiles", "trends"]
+      percentiles: [10, 25, 50, 75, 90, 95, 99]
+      
+      # County configuration
+      county_boundaries: "2024_census"
+      spatial_aggregation: "area_weighted_mean"
+      
+      # Processing parameters optimized for high core count
+      multiprocessing_workers: 32         # Use 32 cores for county processing
+      max_memory_per_worker_gb: 1.8       # 32 * 1.8 = 58GB
+      batch_size_counties: 50             # Process 50 counties at a time
+      
+      # Performance optimizations
+      enable_parallel_variables: true
+      enable_parallel_scenarios: true
+      
+      # Output configuration  
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/ultra_metrics"
+      output_formats: ["netcdf4", "csv", "parquet"]
+      create_county_summaries: true
+
+  # Data Validation Stage
+  - stage_id: "validation"
+    stage_type: "validation" 
+    stage_name: "Ultra Pipeline Validation"
+    package_name: "county_climate.shared.validation"
+    entry_point: "validate_complete_pipeline"
+    depends_on: ["climate_metrics"]
+    trigger_type: "dependency"
+    
+    resource_limits:
+      max_memory_gb: 8.0
+      max_cpu_cores: 8        # More cores for faster validation
+      max_processing_time_hours: 2.0
+      priority: 5
+    
+    stage_config:
+      validation_checks:
+        - "data_completeness"
+        - "coordinate_consistency" 
+        - "temporal_continuity"
+        - "statistical_reasonableness"
+        - "file_integrity"
+      
+      means_output_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/ultra_means"
+      metrics_output_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/ultra_metrics"
+      create_validation_report: true
+      validation_report_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/ultra_validation"
+
+# Data flows between stages
+data_flows:
+  - flow_id: "means_to_metrics"
+    source_stage: "climate_means"
+    target_stage: "climate_metrics"
+    flow_type: "file"
+    data_contracts: ["ClimateDatasetContract"]
+    quality_requirements:
+      min_quality_score: 0.95
+      min_completeness_ratio: 0.95
+    enable_monitoring: true
+    
+  - flow_id: "metrics_to_validation"
+    source_stage: "climate_metrics"
+    target_stage: "validation"
+    flow_type: "file"
+    enable_monitoring: true
+
+# Monitoring and alerting
+enable_monitoring: true
+monitoring_interval_seconds: 30        # More frequent monitoring
+health_check_interval_seconds: 180     # More frequent health checks
+
+# Error handling
+global_retry_attempts: 3
+continue_on_stage_failure: false
+
+# Metadata
+description: "Ultra high-performance pipeline optimized for 56-core, 92.9GB system processing complete NEX-GDDP-CMIP6 NorESM2-LM dataset"
+tags: ["production", "ultra-high-performance", "complete", "means", "metrics", "56-core"]
+created_by: "climate-processing-system"

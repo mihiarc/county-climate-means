@@ -1,0 +1,521 @@
+#!/usr/bin/env python3
+"""
+Unified Regional Climate Normals Processing Pipeline
+
+A single, parameterized processor that can handle any region and climate variable.
+Replaces the separate regional processing scripts to eliminate code duplication.
+
+Features:
+- Supports all regions: CONUS, Alaska, Hawaii, Puerto Rico, Guam
+- Supports all variables: pr, tas, tasmax, tasmin
+- Configurable multiprocessing settings
+- Progress tracking and restart functionality
+- Memory-efficient processing
+"""
+
+import logging
+import sys
+import os
+import time
+from pathlib import Path
+import pandas as pd
+import xarray as xr
+import gc
+import multiprocessing as mp
+from multiprocessing import Pool, Manager, Queue
+from typing import List, Dict, Tuple, Optional, Union
+import psutil
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import traceback
+import json
+from datetime import datetime
+from dataclasses import dataclass
+
+# Import our modules
+from county_climate.means.utils.io_util import NorESM2FileHandler
+from county_climate.means.core.regions import REGION_BOUNDS, extract_region, validate_region_bounds
+from county_climate.means.utils.time_util import handle_time_coordinates, extract_year_from_filename
+from county_climate.means.config import get_config, get_regional_output_dir
+from county_climate.means.utils.rich_progress import RichProgressTracker
+
+@dataclass
+class RegionalProcessingConfig:
+    """Configuration for regional climate processing."""
+    region_key: str
+    variables: List[str]
+    input_data_dir: Path
+    output_base_dir: Path
+    
+    # Processing settings
+    max_cores: int = 6
+    cores_per_variable: int = 2
+    batch_size_years: int = 2
+    max_memory_per_process_gb: int = 4
+    memory_check_interval: int = 10
+    min_years_for_normal: int = 25
+    
+    # Progress tracking
+    status_update_interval: int = 30
+    
+    def __post_init__(self):
+        """Validate configuration after initialization."""
+        if self.region_key not in REGION_BOUNDS:
+            raise ValueError(f"Invalid region key: {self.region_key}")
+        
+        if not validate_region_bounds(self.region_key):
+            raise ValueError(f"Invalid region bounds for: {self.region_key}")
+        
+        # Set up progress tracking files
+        self.progress_status_file = f"{self.region_key.lower()}_processing_progress.json"
+        self.progress_log_file = f"{self.region_key.lower()}_processing_progress.log"
+        self.main_log_file = f"{self.region_key.lower()}_climate_processing.log"
+
+class RegionalClimateProcessor:
+    """Unified processor for regional climate normals."""
+    
+    def __init__(self, config: RegionalProcessingConfig, use_rich_progress: bool = True):
+        self.config = config
+        self.use_rich_progress = use_rich_progress
+        self.logger = self._setup_logging()
+        
+        # Initialize rich progress tracker
+        self.rich_tracker = None
+        if self.use_rich_progress:
+            region_name = REGION_BOUNDS[config.region_key]['name']
+            self.rich_tracker = RichProgressTracker(
+                title=f"Climate Processing - {region_name}",
+                show_system_stats=True,
+                update_interval=0.5
+            )
+        
+    def _setup_logging(self) -> logging.Logger:
+        """Setup logging for the pipeline."""
+        logging.basicConfig(
+            level=logging.CRITICAL,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.FileHandler(self.config.main_log_file)
+            ]
+        )
+        return logging.getLogger(f"{__name__}.{self.config.region_key}")
+    
+    def extract_year_from_path(self, file_path: str) -> Optional[int]:
+        """Extract year from file path."""
+        return extract_year_from_filename(file_path)
+    
+    def process_single_file_for_climatology_safe(self, file_path: str, variable_name: str) -> Tuple[Optional[int], Optional[xr.DataArray]]:
+        """
+        Process a single file to extract daily climatology - safe multiprocessing version.
+        """
+        try:
+            # Extract year from filename
+            year = self.extract_year_from_path(file_path)
+            if year is None:
+                return None, None
+            
+            # Open dataset with conservative settings (no chunking in multiprocessing)
+            ds = xr.open_dataset(file_path, decode_times=False, cache=False)
+            
+            # Check if variable exists
+            if variable_name not in ds.data_vars:
+                ds.close()
+                return None, None
+            
+            # Handle time coordinates
+            ds, time_method = handle_time_coordinates(ds, file_path)
+            
+            # Extract region
+            region_bounds = REGION_BOUNDS[self.config.region_key]
+            region_ds = extract_region(ds, region_bounds)
+            var = region_ds[variable_name]
+            
+            # Calculate daily climatology
+            if 'dayofyear' in var.coords:
+                daily_clim = var.groupby(var.dayofyear).mean(dim='time')
+                result = daily_clim.compute()
+                
+                # Cleanup
+                ds.close()
+                del ds, region_ds, var, daily_clim
+                gc.collect()
+                
+                return year, result
+            else:
+                ds.close()
+                return None, None
+                
+        except Exception as e:
+            self.logger.error(f"Error processing {Path(file_path).name}: {e}")
+            return None, None
+    
+    def compute_climate_normal_safe(self, data_arrays: List, years: List[int], target_year: int) -> Optional[xr.DataArray]:
+        """Compute climate normal from multiple data arrays."""
+        if not data_arrays:
+            return None
+        
+        try:
+            # Stack arrays and compute mean
+            stacked_data = xr.concat(data_arrays, dim='year')
+            mean_data = stacked_data.mean(dim='year')
+            
+            # Add metadata
+            mean_data.attrs.update({
+                'long_name': f'30-year climate normal for {target_year}',
+                'target_year': target_year,
+                'source_years': f"{min(years)}-{max(years)}",
+                'number_of_years': len(years),
+                'processing_method': f'unified_regional_processor_{self.config.region_key}',
+                'region': self.config.region_key
+            })
+            
+            return mean_data
+            
+        except Exception as e:
+            self.logger.error(f"Error computing climate normal for {target_year}: {e}")
+            return None
+    
+    def process_target_year_batch(self, args: Tuple) -> Dict:
+        """Process a batch of target years for a specific variable and period."""
+        (variable, period_type, target_years, worker_id) = args
+        
+        logger = logging.getLogger(f'worker_{worker_id}_{self.config.region_key}')
+        results = []
+        
+        try:
+            # Initialize file handler
+            file_handler = NorESM2FileHandler(self.config.input_data_dir)
+            
+            for target_year in target_years:
+                try:
+                    # Get files for this target year
+                    if period_type == 'historical':
+                        start_year = target_year - 29
+                        end_year = target_year
+                        files = file_handler.get_files_for_period(variable, 'historical', start_year, end_year)
+                    elif period_type == 'hybrid':
+                        files, _ = file_handler.get_hybrid_files_for_period(variable, target_year, 30)
+                    elif period_type == 'ssp245':
+                        start_year = target_year - 29
+                        end_year = target_year
+                        files = file_handler.get_files_for_period(variable, 'ssp245', start_year, end_year)
+                    else:
+                        continue
+                    
+                    if len(files) < self.config.min_years_for_normal:
+                        logger.warning(f"Insufficient files for {variable} {period_type} {target_year}: {len(files)} < {self.config.min_years_for_normal}")
+                        continue
+                    
+                    # Process files to get daily climatologies
+                    daily_climatologies = []
+                    years_used = []
+                    
+                    for file_path in files:
+                        year, daily_clim = self.process_single_file_for_climatology_safe(file_path, variable)
+                        if year is not None and daily_clim is not None:
+                            daily_climatologies.append(daily_clim)
+                            years_used.append(year)
+                    
+                    if len(daily_climatologies) < self.config.min_years_for_normal:
+                        logger.warning(f"Insufficient valid climatologies for {variable} {period_type} {target_year}: {len(daily_climatologies)}")
+                        continue
+                    
+                    # Compute climate normal
+                    climate_normal = self.compute_climate_normal_safe(daily_climatologies, years_used, target_year)
+                    
+                    if climate_normal is None:
+                        continue
+                    
+                    # Save result
+                    output_dir = self.config.output_base_dir / variable / period_type
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    output_file = output_dir / f"{variable}_{self.config.region_key}_{period_type}_{target_year}_30yr_normal.nc"
+                    
+                    # RESTART FUNCTIONALITY: Check if file already exists and skip
+                    if output_file.exists():
+                        results.append({
+                            'target_year': target_year,
+                            'status': 'skipped',
+                            'output_file': str(output_file),
+                            'reason': 'file_already_exists'
+                        })
+                        continue
+                    
+                    # Add comprehensive metadata
+                    climate_normal.attrs.update({
+                        'title': f'{variable.upper()} 30-Year {period_type.title()} Climate Normal ({self.config.region_key}) - Target Year {target_year}',
+                        'variable': variable,
+                        'region': self.config.region_key,
+                        'region_name': REGION_BOUNDS[self.config.region_key]['name'],
+                        'target_year': target_year,
+                        'period_type': period_type,
+                        'num_years': len(years_used),
+                        'processing': f'Unified regional processor for {self.config.region_key}',
+                        'source': 'NorESM2-LM climate model',
+                        'method': '30-year rolling climate normal',
+                        'created': datetime.now().isoformat()
+                    })
+                    
+                    climate_normal.to_netcdf(output_file)
+                    results.append({
+                        'target_year': target_year,
+                        'status': 'success',
+                        'output_file': str(output_file),
+                        'years_used': len(years_used)
+                    })
+                    
+                    # Memory cleanup
+                    del daily_climatologies, climate_normal
+                    gc.collect()
+                    
+                except Exception as e:
+                    logger.error(f"Error processing target year {target_year}: {e}")
+                    results.append({
+                        'target_year': target_year,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+        
+        except Exception as e:
+            logger.error(f"Error in batch processing: {e}")
+            return {'worker_id': worker_id, 'status': 'error', 'error': str(e)}
+        
+        return {'worker_id': worker_id, 'status': 'success', 'results': results}
+    
+    def process_variable_multiprocessing(self, variable: str) -> Dict:
+        """Process a single variable using multiprocessing."""
+        self.logger.info(f"🔄 Starting multiprocessing for {variable} in {self.config.region_key}")
+        
+        # Initialize file handler to get available periods
+        file_handler = NorESM2FileHandler(self.config.input_data_dir)
+        
+        # Define periods to process
+        periods_config = {
+            'historical': list(range(1980, 2015)),  # 1980-2014
+            'hybrid': list(range(2015, 2045)),      # 2015-2044
+            'ssp245': list(range(2045, 2101))       # 2045-2100
+        }
+        
+        all_results = {}
+        
+        for period_type, target_years in periods_config.items():
+            self.logger.info(f"📅 Processing {period_type} period for {variable}")
+            
+            # Create batches of target years
+            year_batches = [target_years[i:i + self.config.batch_size_years] 
+                           for i in range(0, len(target_years), self.config.batch_size_years)]
+            
+            # Prepare arguments for multiprocessing
+            args_list = [(variable, period_type, batch, i) 
+                        for i, batch in enumerate(year_batches)]
+            
+            # Process batches in parallel
+            # Note: We could integrate rich progress here in the future for even more granular tracking
+            with ProcessPoolExecutor(max_workers=self.config.cores_per_variable) as executor:
+                future_to_batch = {executor.submit(self.process_target_year_batch, args): args 
+                                  for args in args_list}
+                
+                period_results = []
+                completed_batches = 0
+                total_batches = len(args_list)
+                
+                for future in as_completed(future_to_batch):
+                    try:
+                        result = future.result()
+                        period_results.append(result)
+                        completed_batches += 1
+                        
+                        # Update rich progress tracker
+                        if self.rich_tracker:
+                            # Estimate progress based on completed batches
+                            batch_progress = len(target_years) // total_batches
+                            self.rich_tracker.update_task(
+                                variable, 
+                                advance=batch_progress,
+                                current_item=f"{period_type} - batch {completed_batches}/{total_batches}"
+                            )
+                        
+                    except Exception as e:
+                        self.logger.error(f"Batch processing failed: {e}")
+                        completed_batches += 1
+                        
+                        # Update progress even for failed batches
+                        if self.rich_tracker:
+                            batch_progress = len(target_years) // total_batches
+                            self.rich_tracker.update_task(
+                                variable, 
+                                advance=batch_progress,
+                                current_item=f"{period_type} - batch {completed_batches}/{total_batches} (failed)",
+                                failed=True
+                            )
+            
+            all_results[period_type] = period_results
+        
+        return all_results
+    
+    def process_all_variables(self) -> Dict:
+        """Process all variables for the region."""
+        self.logger.info(f"🌍 Starting regional processing for {self.config.region_key}")
+        self.logger.info(f"📊 Variables: {self.config.variables}")
+        
+        # Start rich progress tracker if enabled
+        if self.rich_tracker:
+            self.rich_tracker.start()
+            
+            # Add tasks for each variable
+            for variable in self.config.variables:
+                # Estimate total files per variable (rough estimate)
+                # Historical: 35 years, Hybrid: 30 years, SSP245: 56 years = ~121 files per variable
+                estimated_files = 121
+                self.rich_tracker.add_task(
+                    name=variable,
+                    description=f"Processing {variable.upper()} data",
+                    total=estimated_files
+                )
+        
+        start_time = time.time()
+        all_results = {}
+        
+        try:
+            for variable in self.config.variables:
+                self.logger.info(f"🔄 Processing variable: {variable}")
+                variable_start = time.time()
+                
+                try:
+                    variable_results = self.process_variable_multiprocessing(variable)
+                    all_results[variable] = variable_results
+                    
+                    variable_time = time.time() - variable_start
+                    self.logger.info(f"✅ Completed {variable} in {variable_time:.1f} seconds")
+                    
+                    # Mark task as completed in rich tracker
+                    if self.rich_tracker:
+                        self.rich_tracker.complete_task(variable, "completed")
+                    
+                except Exception as e:
+                    self.logger.error(f"❌ Failed to process {variable}: {e}")
+                    all_results[variable] = {'status': 'error', 'error': str(e)}
+                    
+                    # Mark task as failed in rich tracker
+                    if self.rich_tracker:
+                        self.rich_tracker.complete_task(variable, "failed")
+            
+            total_time = time.time() - start_time
+            self.logger.info(f"🎉 Regional processing completed in {total_time:.1f} seconds")
+            
+        finally:
+            # Stop rich progress tracker
+            if self.rich_tracker:
+                self.rich_tracker.stop()
+        
+        return all_results
+
+
+def create_regional_processor(region_key: str, 
+                            variables: List[str] = None,
+                            use_rich_progress: bool = True,
+                            **kwargs) -> RegionalClimateProcessor:
+    """
+    Factory function to create a regional processor with configuration.
+    
+    Args:
+        region_key: Region to process ('CONUS', 'AK', 'HI', 'PRVI', 'GU')
+        variables: List of variables to process (default: all)
+        use_rich_progress: Whether to use rich progress tracking (default: True)
+        **kwargs: Additional configuration options
+    
+    Returns:
+        Configured RegionalClimateProcessor instance
+    """
+    # Get global configuration
+    global_config = get_config()
+    
+    # Default variables
+    if variables is None:
+        variables = ['pr', 'tas', 'tasmax', 'tasmin']
+    
+    # Extract rich progress option from kwargs
+    processor_kwargs = {k: v for k, v in kwargs.items() if k not in [
+        'max_cores', 'cores_per_variable', 'batch_size_years', 
+        'max_memory_per_process_gb', 'memory_check_interval', 
+        'min_years_for_normal', 'status_update_interval'
+    ]}
+    
+    # Create processing configuration
+    config_kwargs = {k: v for k, v in kwargs.items() if k in [
+        'max_cores', 'cores_per_variable', 'batch_size_years', 
+        'max_memory_per_process_gb', 'memory_check_interval', 
+        'min_years_for_normal', 'status_update_interval'
+    ]}
+    
+    config = RegionalProcessingConfig(
+        region_key=region_key,
+        variables=variables,
+        input_data_dir=global_config.paths.input_data_dir,
+        output_base_dir=get_regional_output_dir(region_key),
+        **config_kwargs
+    )
+    
+    return RegionalClimateProcessor(config, use_rich_progress=use_rich_progress)
+
+
+def process_region(region_key: str, 
+                  variables: List[str] = None,
+                  use_rich_progress: bool = True,
+                  **kwargs) -> Dict:
+    """
+    Convenience function to process a region with default settings.
+    
+    Args:
+        region_key: Region to process ('CONUS', 'AK', 'HI', 'PRVI', 'GU')
+        variables: List of variables to process (default: all)
+        use_rich_progress: Whether to use rich progress tracking (default: True)
+        **kwargs: Additional configuration options
+    
+    Returns:
+        Processing results dictionary
+    """
+    processor = create_regional_processor(region_key, variables, use_rich_progress, **kwargs)
+    return processor.process_all_variables()
+
+
+def main():
+    """Main function for command-line usage."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Unified Regional Climate Processor')
+    parser.add_argument('region', choices=['CONUS', 'AK', 'HI', 'PRVI', 'GU'],
+                       help='Region to process')
+    parser.add_argument('--variables', nargs='+', 
+                       choices=['pr', 'tas', 'tasmax', 'tasmin'],
+                       default=['pr', 'tas', 'tasmax', 'tasmin'],
+                       help='Variables to process')
+    parser.add_argument('--max-cores', type=int, default=6,
+                       help='Maximum number of cores to use')
+    parser.add_argument('--cores-per-variable', type=int, default=2,
+                       help='Cores per variable')
+    parser.add_argument('--batch-size', type=int, default=2,
+                       help='Batch size for year processing')
+    
+    args = parser.parse_args()
+    
+    print(f"🌍 Starting regional climate processing for {args.region}")
+    print(f"📊 Variables: {args.variables}")
+    print(f"⚙️  Max cores: {args.max_cores}, Cores per variable: {args.cores_per_variable}")
+    
+    # Process the region
+    results = process_region(
+        region_key=args.region,
+        variables=args.variables,
+        max_cores=args.max_cores,
+        cores_per_variable=args.cores_per_variable,
+        batch_size_years=args.batch_size
+    )
+    
+    print(f"🎉 Processing completed for {args.region}")
+    return results
+
+
+if __name__ == "__main__":
+    main() 

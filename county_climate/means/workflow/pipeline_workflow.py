@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import asdict
 
-from means.workflow.integrated_processor import IntegratedClimateProcessor, ProcessingWorkflow
-from means.pipeline.interface import PipelineInterface
-from means.config import get_config
-from means.core.regions import REGION_BOUNDS
+from county_climate.means.workflow.integrated_processor import IntegratedClimateProcessor, ProcessingWorkflow
+from county_climate.means.pipeline.interface import PipelineInterface
+from county_climate.means.config import get_config
+from county_climate.means.core.regions import REGION_BOUNDS
 
 logger = logging.getLogger(__name__)
 

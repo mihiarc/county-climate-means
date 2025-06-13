@@ -21,7 +21,7 @@ import xarray as xr
 import matplotlib.colors as mcolors
 from matplotlib.cm import get_cmap
 
-from means.core.regions import REGION_BOUNDS
+from county_climate.means.core.regions import REGION_BOUNDS
 
 def convert_to_standard_longitude(lon_360):
     """Convert longitude from 0-360 to -180-180 system."""

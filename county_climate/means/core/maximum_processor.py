@@ -25,10 +25,10 @@ import psutil
 from typing import List, Dict, Any, Optional, Tuple
 
 # Import our modules
-from means.utils.io_util import NorESM2FileHandler
-from means.core.regions import REGION_BOUNDS, extract_region
-from means.config import get_config
-from means.utils.rich_progress import RichProgressTracker
+from county_climate.means.utils.io_util import NorESM2FileHandler
+from county_climate.means.core.regions import REGION_BOUNDS, extract_region
+from county_climate.means.config import get_config
+from county_climate.means.utils.rich_progress import RichProgressTracker
 
 logger = logging.getLogger(__name__)
 

@@ -23,7 +23,7 @@ import cartopy.feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import numpy as np
 
-from means.core.regions import REGION_BOUNDS
+from county_climate.means.core.regions import REGION_BOUNDS
 
 def convert_to_standard_longitude(lon_360):
     """Convert longitude from 0-360 to -180-180 system."""

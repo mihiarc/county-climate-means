@@ -312,7 +312,7 @@ from pathlib import Path
 # Import the catalog bridge adapter
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from means.pipeline.catalog_bridge import CatalogToBridgeAdapter
+from county_climate.means.pipeline.catalog_bridge import CatalogToBridgeAdapter
 
 # Initialize catalog adapter
 CATALOG_PATH = "{catalog_path}"

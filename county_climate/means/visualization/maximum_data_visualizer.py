@@ -34,9 +34,9 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # Import our modules
-from means.core.regions import REGION_BOUNDS, get_region_crs_info
-from means.visualization.regional_visualizer import RegionalVisualizer
-from means.config import get_config
+from county_climate.means.core.regions import REGION_BOUNDS, get_region_crs_info
+from county_climate.means.visualization.regional_visualizer import RegionalVisualizer
+from county_climate.means.config import get_config
 
 logger = logging.getLogger(__name__)
 

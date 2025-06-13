@@ -1,0 +1,242 @@
+base_data_path: !!python/object/apply:pathlib.PosixPath
+- /
+- data
+- climate
+continue_on_stage_failure: false
+created_at: 2025-06-11 19:01:18.372245+00:00
+created_by: null
+data_flows:
+- alert_on_failure: true
+  batch_size: null
+  buffer_size: null
+  data_contracts:
+  - ClimateDatasetContract
+  enable_monitoring: true
+  flow_id: means_to_metrics
+  flow_type: !!python/object/apply:county_climate.shared.config.integration_config.DataFlowType
+  - file
+  log_level: INFO
+  quality_requirements:
+    min_quality_score: 0.95
+  source_stage: climate_means
+  target_stage: county_metrics
+  timeout_seconds: null
+- alert_on_failure: true
+  batch_size: null
+  buffer_size: null
+  data_contracts:
+  - CountyMetricsContract
+  enable_monitoring: true
+  flow_id: metrics_to_extremes
+  flow_type: !!python/object/apply:county_climate.shared.config.integration_config.DataFlowType
+  - file
+  log_level: INFO
+  quality_requirements:
+    min_completeness: 0.9
+  source_stage: county_metrics
+  target_stage: climate_extremes
+  timeout_seconds: null
+description: Complete climate data processing pipeline from means through visualization
+enable_monitoring: true
+environment: !!python/object/apply:county_climate.shared.config.integration_config.EnvironmentType
+- production
+global_config:
+  cache_directory: /data/cache
+  data_source: NEX-GDDP-CMIP6
+  enable_caching: true
+  model: NorESM2-LM
+  notification_email: admin@climate-processing.org
+  output_crs: EPSG:4326
+global_resource_limits:
+  max_cpu_cores: 16
+  max_disk_space_gb: null
+  max_memory_gb: 32.0
+  max_processing_time_hours: 24.0
+  priority: 1
+global_retry_attempts: 3
+health_check_interval_seconds: 60
+log_path: !!python/object/apply:pathlib.PosixPath
+- /
+- var
+- log
+- climate
+- full_pipeline.log
+monitoring_interval_seconds: 60
+pipeline_id: full_climate_pipeline
+pipeline_name: Complete Climate Data Processing Pipeline
+pipeline_version: 2.0.0
+stages:
+- data_transformations: []
+  depends_on: []
+  entry_point: process_region
+  environment_overrides: {}
+  input_data_patterns: []
+  optional_depends_on: []
+  output_data_patterns: []
+  package_name: county_climate.means
+  parallel_execution: true
+  resource_limits:
+    max_cpu_cores: 6
+    max_disk_space_gb: null
+    max_memory_gb: 12.0
+    max_processing_time_hours: 8.0
+    priority: 10
+  retry_attempts: 3
+  retry_delay_seconds: 60.0
+  stage_config:
+    enable_quality_checks: true
+    regions:
+    - CONUS
+    - AK
+    - HI
+    scenarios:
+    - historical
+    - ssp245
+    variables:
+    - temperature
+    - precipitation
+    - temperature_max
+    - temperature_min
+    year_range:
+    - 1980
+    - 2020
+  stage_id: climate_means
+  stage_name: Climate Means Processing
+  stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+  - means
+  trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+  - manual
+- data_transformations: []
+  depends_on:
+  - climate_means
+  entry_point: process_county_metrics
+  environment_overrides: {}
+  input_data_patterns: []
+  optional_depends_on: []
+  output_data_patterns: []
+  package_name: county_climate.metrics
+  parallel_execution: true
+  resource_limits:
+    max_cpu_cores: 4
+    max_disk_space_gb: null
+    max_memory_gb: 8.0
+    max_processing_time_hours: 4.0
+    priority: 8
+  retry_attempts: 3
+  retry_delay_seconds: 60.0
+  stage_config:
+    county_boundaries: 2024_census
+    metrics:
+    - mean
+    - percentiles
+    - trends
+    spatial_aggregation: area_weighted_mean
+  stage_id: county_metrics
+  stage_name: County-Level Climate Metrics
+  stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+  - metrics
+  trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+  - dependency
+- data_transformations: []
+  depends_on:
+  - county_metrics
+  entry_point: process_extremes
+  environment_overrides: {}
+  input_data_patterns: []
+  optional_depends_on: []
+  output_data_patterns: []
+  package_name: county_climate.metrics.extremes
+  parallel_execution: true
+  resource_limits:
+    max_cpu_cores: 4
+    max_disk_space_gb: null
+    max_memory_gb: 6.0
+    max_processing_time_hours: 2.0
+    priority: 6
+  retry_attempts: 3
+  retry_delay_seconds: 60.0
+  stage_config:
+    extreme_indices:
+    - heat_waves
+    - cold_spells
+    - heavy_precipitation
+    threshold_percentiles:
+    - 90
+    - 95
+    - 99
+  stage_id: climate_extremes
+  stage_name: Climate Extremes Analysis
+  stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+  - extremes
+  trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+  - dependency
+- data_transformations: []
+  depends_on:
+  - county_metrics
+  - climate_extremes
+  entry_point: create_visualizations
+  environment_overrides: {}
+  input_data_patterns: []
+  optional_depends_on:
+  - climate_extremes
+  output_data_patterns: []
+  package_name: county_climate.visualization
+  parallel_execution: true
+  resource_limits:
+    max_cpu_cores: 2
+    max_disk_space_gb: null
+    max_memory_gb: 4.0
+    max_processing_time_hours: 1.0
+    priority: 3
+  retry_attempts: 3
+  retry_delay_seconds: 60.0
+  stage_config:
+    create_interactive_maps: true
+    create_summary_reports: true
+    output_formats:
+    - png
+    - html
+    - pdf
+  stage_id: visualization
+  stage_name: Data Visualization
+  stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+  - visualization
+  trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+  - dependency
+- data_transformations: []
+  depends_on:
+  - visualization
+  entry_point: validate_complete_pipeline
+  environment_overrides: {}
+  input_data_patterns: []
+  optional_depends_on: []
+  output_data_patterns: []
+  package_name: county_climate.shared.validation
+  parallel_execution: true
+  resource_limits:
+    max_cpu_cores: 1
+    max_disk_space_gb: null
+    max_memory_gb: 2.0
+    max_processing_time_hours: 0.5
+    priority: 5
+  retry_attempts: 3
+  retry_delay_seconds: 60.0
+  stage_config: {}
+  stage_id: final_validation
+  stage_name: Complete Pipeline Validation
+  stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+  - validation
+  trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+  - dependency
+tags:
+- production
+- complete
+- means
+- metrics
+- extremes
+- visualization
+temp_data_path: !!python/object/apply:pathlib.PosixPath
+- /
+- tmp
+- climate_full
+updated_at: null

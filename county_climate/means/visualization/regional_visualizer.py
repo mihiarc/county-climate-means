@@ -21,7 +21,7 @@ from typing import Dict, Any, Optional, Tuple, List
 import logging
 
 # Import our region definitions
-from means.core.regions import REGION_BOUNDS, get_region_crs_info
+from county_climate.means.core.regions import REGION_BOUNDS, get_region_crs_info
 
 logger = logging.getLogger(__name__)
 

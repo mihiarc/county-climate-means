@@ -1,0 +1,86 @@
+# Configuration for running Phase 2 (metrics) only
+# This assumes Phase 1 outputs already exist at the specified location
+
+pipeline_id: "phase2_metrics_only"
+pipeline_name: "Phase 2 - County Metrics Processing Only"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/phase2_processing"
+log_path: "/tmp/phase2_processing/metrics.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 40.0
+  max_cpu_cores: 24
+  max_processing_time_hours: 6.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+
+# Single stage - metrics only
+stages:
+  # Climate Metrics Processing Stage (no dependencies)
+  - stage_id: "climate_metrics"
+    stage_type: "metrics"
+    stage_name: "County-Level Climate Metrics"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    trigger_type: "manual"  # Manual trigger, no dependencies
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 32.0
+      max_cpu_cores: 20
+      max_processing_time_hours: 4.0
+      priority: 10
+    
+    # Stage configuration
+    stage_config:
+      # Input from Phase 1
+      input_means_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      
+      # Metrics to calculate
+      metrics: ["mean", "std", "min", "max", "percentiles"]
+      percentiles: [10, 25, 50, 75, 90, 95, 99]
+      
+      # County configuration
+      county_boundaries: "2024_census"
+      spatial_aggregation: "area_weighted_mean"
+      
+      # Processing parameters
+      multiprocessing_workers: 12
+      max_memory_per_worker_gb: 2.5
+      batch_size_counties: 100
+      
+      # Variables and regions to process
+      variables: ["tas"]  # Start with temperature only
+      regions: ["CONUS"]  # Start with CONUS only
+      scenarios: ["historical", "ssp245"]
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics"
+      output_formats: ["csv", "netcdf4"]
+      create_county_summaries: true
+      
+      # Progress tracking
+      enable_rich_progress: true
+
+# Monitoring configuration
+enable_monitoring: true
+monitoring_interval_seconds: 30
+health_check_interval_seconds: 60
+
+# Execution settings
+continue_on_stage_failure: false
+global_retry_attempts: 2
+
+# Tags for organization
+tags:
+  - "phase2-only"
+  - "metrics"
+  - "county-aggregation"

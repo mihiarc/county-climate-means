@@ -13,6 +13,7 @@ Climate Means is a Python package designed for processing climate data and calcu
 - ⚡ **High Performance**: Multiprocessing support for large datasets
 - 📊 **Multiple Variables**: Support for precipitation, temperature, and temperature extremes
 - 🔄 **Flexible Scenarios**: Historical, hybrid, and future climate scenarios
+- 📈 **Rich Progress Tracking**: Beautiful real-time progress display with system stats (enabled by default)
 
 ## Installation
 

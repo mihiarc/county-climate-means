@@ -1,0 +1,335 @@
+configuration:
+  base_data_path: !!python/object/apply:pathlib.PosixPath
+  - /
+  - media
+  - mihiarc
+  - RPA1TB
+  - CLIMATE_DATA
+  - NorESM2-LM
+  continue_on_stage_failure: false
+  created_at: 2025-06-13 13:13:16.288338+00:00
+  created_by: climate_processing_team
+  data_flows:
+  - alert_on_failure: true
+    batch_size: null
+    buffer_size: null
+    data_contracts: []
+    enable_monitoring: true
+    flow_id: means_to_metrics
+    flow_type: !!python/object/apply:county_climate.shared.config.integration_config.DataFlowType
+    - file
+    log_level: INFO
+    quality_requirements: {}
+    source_stage: climate_means_all
+    target_stage: county_metrics_all
+    timeout_seconds: null
+  - alert_on_failure: true
+    batch_size: null
+    buffer_size: null
+    data_contracts: []
+    enable_monitoring: true
+    flow_id: metrics_to_validation
+    flow_type: !!python/object/apply:county_climate.shared.config.integration_config.DataFlowType
+    - file
+    log_level: INFO
+    quality_requirements: {}
+    source_stage: county_metrics_all
+    target_stage: validation_qc
+    timeout_seconds: null
+  description: "Complete climate processing pipeline that processes all variables\
+    \ (pr, tas, tasmax, tasmin)\nacross all US regions (CONUS, Alaska, Hawaii, PRVI,\
+    \ Guam) for all scenarios\n(historical, ssp245, ssp585). Includes both Phase 1\
+    \ (30-year climate means) and\nPhase 2 (county-level metrics) processing with\
+    \ comprehensive validation.\n\nExpected outputs:\n- Phase 1: ~3,900 NetCDF files\
+    \ (4 vars \xD7 5 regions \xD7 3 scenarios \xD7 65-150 years)\n- Phase 2: ~3,900\
+    \ metrics files \xD7 3 formats = ~11,700 files\n- Processing time: 24-48 hours\
+    \ on 95GB/56-core system\n"
+  enable_monitoring: true
+  environment: !!python/object/apply:county_climate.shared.config.integration_config.EnvironmentType
+  - production
+  global_config:
+    data_source: NEX-GDDP-CMIP6
+    debug_mode: false
+    enable_profiling: false
+    fast_mode: false
+    model: NorESM2-LM
+    save_intermediate_results: false
+  global_resource_limits:
+    max_cpu_cores: 52
+    max_disk_space_gb: null
+    max_memory_gb: 90.0
+    max_processing_time_hours: 48.0
+    priority: 1
+  global_retry_attempts: 3
+  health_check_interval_seconds: 300
+  log_path: !!python/object/apply:pathlib.PosixPath
+  - /
+  - media
+  - mihiarc
+  - RPA1TB
+  - CLIMATE_OUTPUT
+  - logs
+  - complete_pipeline.log
+  monitoring_interval_seconds: 60
+  pipeline_id: complete_all_regions
+  pipeline_name: Complete Climate Processing - All Variables & Regions
+  pipeline_version: 1.0.0
+  stages:
+  - data_transformations: []
+    depends_on: []
+    entry_point: means_stage_handler
+    environment_overrides: {}
+    input_data_patterns: []
+    optional_depends_on: []
+    output_data_patterns: []
+    package_name: county_climate.means.integration
+    parallel_execution: true
+    resource_limits:
+      max_cpu_cores: 48
+      max_disk_space_gb: null
+      max_memory_gb: 80.0
+      max_processing_time_hours: 36.0
+      priority: 10
+    retry_attempts: 3
+    retry_delay_seconds: 300.0
+    stage_config:
+      batch_size_years: 2
+      enable_debug_output: false
+      enable_parallel_regions: true
+      enable_parallel_variables: true
+      enable_quality_checks: true
+      enable_rich_progress: true
+      future_years:
+      - 2015
+      - 2100
+      historical_years:
+      - 1950
+      - 2014
+      max_memory_per_worker_gb: 6.0
+      max_parallel_regions: 2
+      max_parallel_variables: 2
+      multiprocessing_workers: 12
+      output_base_path: /media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means
+      progress_update_interval: 60
+      regions:
+      - CONUS
+      - AK
+      - HI
+      - PRVI
+      - GU
+      save_intermediate_files: false
+      scenarios:
+      - historical
+      - ssp245
+      - ssp585
+      variables:
+      - pr
+      - tas
+      - tasmax
+      - tasmin
+    stage_id: climate_means_all
+    stage_name: Climate Means Processing - All Regions & Variables
+    stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+    - means
+    trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+    - manual
+  - data_transformations: []
+    depends_on:
+    - climate_means_all
+    entry_point: metrics_stage_handler
+    environment_overrides: {}
+    input_data_patterns: []
+    optional_depends_on: []
+    output_data_patterns: []
+    package_name: county_climate.metrics.integration
+    parallel_execution: true
+    resource_limits:
+      max_cpu_cores: 24
+      max_disk_space_gb: null
+      max_memory_gb: 40.0
+      max_processing_time_hours: 12.0
+      priority: 8
+    retry_attempts: 2
+    retry_delay_seconds: 120.0
+    stage_config:
+      calculate_seasonal_metrics: true
+      filter_by_population: false
+      max_memory_per_worker_gb: 4.0
+      metrics:
+      - mean
+      - std
+      - min
+      - max
+      min_grid_points: 1
+      multiprocessing_workers: 8
+      output_base_path: /media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics
+      output_formats:
+      - csv
+      - parquet
+      - netcdf
+      percentiles:
+      - 10
+      - 25
+      - 50
+      - 75
+      - 90
+      process_all_counties: true
+      regions:
+      - CONUS
+      - AK
+      - HI
+      - PRVI
+      - GU
+      scenarios:
+      - historical
+      - ssp245
+      - ssp585
+      seasons:
+      - months:
+        - 12
+        - 1
+        - 2
+        name: DJF
+      - months:
+        - 3
+        - 4
+        - 5
+        name: MAM
+      - months:
+        - 6
+        - 7
+        - 8
+        name: JJA
+      - months:
+        - 9
+        - 10
+        - 11
+        name: SON
+      variables:
+      - pr
+      - tas
+      - tasmax
+      - tasmin
+    stage_id: county_metrics_all
+    stage_name: County Metrics Processing - All Variables & Regions
+    stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+    - metrics
+    trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+    - dependency
+  - data_transformations: []
+    depends_on:
+    - county_metrics_all
+    entry_point: ValidationStageHandler
+    environment_overrides: {}
+    input_data_patterns: []
+    optional_depends_on: []
+    output_data_patterns: []
+    package_name: county_climate.validation.integration
+    parallel_execution: true
+    resource_limits:
+      max_cpu_cores: 8
+      max_disk_space_gb: null
+      max_memory_gb: 16.0
+      max_processing_time_hours: 2.0
+      priority: 5
+    retry_attempts: 3
+    retry_delay_seconds: 60.0
+    stage_config:
+      output_dir: /media/mihiarc/RPA1TB/CLIMATE_OUTPUT/validation
+      run_visualizations: true
+      validation_config:
+        expected_counties: 3109
+        expected_scenarios:
+        - historical
+        - ssp245
+        - ssp585
+        iqr_multiplier: 1.5
+        max_missing_overall: 5.0
+        max_missing_per_county: 15.0
+        max_missing_per_metric: 10.0
+        max_year_to_year_precip_change: 500.0
+        max_year_to_year_temp_change: 5.0
+        modified_z_threshold: 3.5
+        plot_dpi: 300
+        run_completeness_check: true
+        run_logical_check: true
+        run_outlier_detection: true
+        run_plausibility_check: true
+        run_spatial_check: true
+        run_temporal_check: true
+        run_visualization: true
+        save_plots: true
+        z_score_threshold: 3.0
+      validators_to_run:
+      - qaqc
+      - spatial
+      - precipitation
+    stage_id: validation_qc
+    stage_name: QA/QC Validation
+    stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+    - validation
+    trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+    - dependency
+  tags:
+  - production
+  - complete
+  - all-regions
+  - all-variables
+  - validated
+  temp_data_path: !!python/object/apply:pathlib.PosixPath
+  - /
+  - tmp
+  - climate_processing
+  updated_at: null
+execution_summary:
+  completed_stages: 3
+  end_time: '2025-06-13T13:15:58.178316+00:00'
+  execution_id: exec_1749820396
+  failed_stages: 0
+  pipeline_id: complete_all_regions
+  start_time: '2025-06-13T13:13:16.474436+00:00'
+  status: completed
+  total_stages: 3
+generated_at: '2025-06-13T13:15:58.178816+00:00'
+stage_details:
+  climate_means_all:
+    attempt_number: 1
+    duration_seconds: 2.074339
+    end_time: '2025-06-13T13:13:18.548984+00:00'
+    error_message: null
+    output_data_summary:
+      output_base_path: /media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means
+      output_files: '[''/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means/tas/historical/tas_CONUS_historical_2000_30yr_normal.nc...'
+      processed_datasets: '[{''variable'': ''tas'', ''region'': ''CONUS'', ''scenario'':
+        ''historical'', ''processing_time_seconds'': 0.50501...'
+      processing_stats: '{''total_datasets'': 1, ''successful_datasets'': 1, ''failed_datasets'':
+        0, ''total_processing_time'': 2.055...'
+      status: completed
+      success_rate: 100.0
+      total_processing_time_seconds: 2.0556161403656006
+    start_time: '2025-06-13T13:13:16.474645+00:00'
+    status: completed
+  county_metrics_all:
+    attempt_number: 1
+    duration_seconds: 159.62853
+    end_time: '2025-06-13T13:15:58.177734+00:00'
+    error_message: null
+    output_data_summary:
+      output_files: '[''/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics/tas_CONUS_historical_2000_30yr_normal_county_metrics....'
+      processing_stats: '{''files_processed'': 121, ''counties_processed'': 376189,
+        ''metrics_calculated'': [''mean'', ''std'', ''min'', ...'
+      processing_time_seconds: 159.62591743469238
+      status: completed
+    start_time: '2025-06-13T13:13:18.549204+00:00'
+    status: completed
+  validation_qc:
+    attempt_number: 1
+    duration_seconds: 0.000252
+    end_time: '2025-06-13T13:15:58.178230+00:00'
+    error_message: null
+    output_data_summary:
+      error: No output files found
+      status: completed
+      validation_passed: false
+    start_time: '2025-06-13T13:15:58.177978+00:00'
+    status: completed

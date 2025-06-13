@@ -1,0 +1,248 @@
+pipeline_id: "production_with_validation"
+pipeline_name: "High Performance Climate Processing with QA/QC Validation"
+pipeline_version: "1.1.0"
+environment: "production"
+
+# Data paths for your specific setup
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/var/log/climate/production.log"
+
+# Global resource limits optimized for your hardware
+global_resource_limits:
+  max_memory_gb: 80.0      # Leave 15GB for system
+  max_cpu_cores: 48        # Leave 8 cores for system
+  max_processing_time_hours: 24.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  climate_normals_period: 30
+  output_format: "netcdf4"
+  compression_level: 4
+  enable_caching: true
+  cache_directory: "/tmp/climate_cache"
+
+# Pipeline stages
+stages:
+  # Climate Means Processing Stage
+  - stage_id: "climate_means"
+    stage_type: "means"
+    stage_name: "Climate Means Processing"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource limits for means processing
+    resource_limits:
+      max_memory_gb: 60.0     # High memory for large datasets
+      max_cpu_cores: 40       # Use most cores for parallel processing
+      max_processing_time_hours: 12.0
+      priority: 10
+    
+    # Retry configuration
+    retry_attempts: 3
+    retry_delay_seconds: 300  # 5 minutes between retries
+    
+    # Stage-specific configuration
+    stage_config:
+      # Variables to process
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # Regions to process  
+      regions: ["CONUS", "AK", "HI", "PRVI"]
+      
+      # Climate scenarios
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Processing parameters optimized for your hardware
+      multiprocessing_workers: 16        # Optimal for means processing
+      batch_size_years: 10               # Process 10 years at a time
+      max_memory_per_worker_gb: 3.5      # 16 * 3.5 = 56GB
+      
+      # Performance optimizations
+      enable_parallel_regions: true
+      enable_parallel_variables: true
+      max_parallel_regions: 2            # Process 2 regions simultaneously
+      max_parallel_variables: 4          # All 4 variables in parallel
+      
+      # Quality and validation
+      enable_quality_checks: true
+      min_data_completeness: 0.95
+      enable_coordinate_validation: true
+      
+      # Progress tracking
+      enable_rich_progress: true  # Beautiful real-time progress display
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      create_summary_files: true
+      save_processing_metadata: true
+
+  # Climate Metrics Processing Stage  
+  - stage_id: "climate_metrics"
+    stage_type: "metrics"
+    stage_name: "County-Level Climate Metrics"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    depends_on: ["climate_means"]
+    trigger_type: "dependency"
+    
+    # Resource limits for metrics processing
+    resource_limits:
+      max_memory_gb: 40.0     # Moderate memory for county processing
+      max_cpu_cores: 32       # Good parallelization for counties
+      max_processing_time_hours: 8.0
+      priority: 8
+    
+    # Retry configuration
+    retry_attempts: 2
+    retry_delay_seconds: 180  # 3 minutes between retries
+    
+    # Stage-specific configuration
+    stage_config:
+      # County boundaries (now uses modern GeoParquet format)
+      use_modern_county_format: true
+      
+      # Processing parameters
+      multiprocessing_workers: 12        # Good for county processing
+      batch_size_counties: 100           # Process 100 counties at a time
+      max_memory_per_worker_gb: 3.0      # 12 * 3 = 36GB
+      
+      # Metrics to calculate
+      calculate_temperature_metrics: true
+      calculate_precipitation_metrics: true
+      calculate_extremes: true
+      calculate_seasonal_metrics: true
+      
+      # Quality settings
+      min_data_completeness_threshold: 0.90
+      validate_county_boundaries: true
+      
+      # Progress tracking
+      enable_rich_progress: true
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics"
+      output_formats: ["csv", "parquet", "netcdf"]
+      create_county_summaries: true
+      
+      # Percentiles for metrics
+      percentiles: [5, 10, 25, 50, 75, 90, 95]
+
+  # Validation and QA/QC Stage (Phase 3)
+  - stage_id: "validation"
+    stage_type: "validation"
+    stage_name: "QA/QC Validation"
+    package_name: "county_climate.validation.integration"
+    entry_point: "validation_stage_handler"
+    depends_on: ["climate_metrics"]
+    trigger_type: "dependency"
+    
+    # Resource limits for validation
+    resource_limits:
+      max_memory_gb: 16.0     # Moderate memory for validation
+      max_cpu_cores: 8        # Limited parallelization
+      max_processing_time_hours: 2.0
+      priority: 6
+    
+    # Retry configuration
+    retry_attempts: 1
+    retry_delay_seconds: 60
+    
+    # Stage-specific configuration
+    stage_config:
+      # Output directory for validation results
+      output_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/validation"
+      
+      # Validators to run
+      validators_to_run: ["qaqc", "spatial", "precipitation"]
+      
+      # Enable visualizations
+      run_visualizations: true
+      
+      # Validation configuration
+      validation_config:
+        # Data expectations
+        expected_counties: 3109
+        expected_scenarios: ["historical", "ssp245", "ssp585"]
+        
+        # Outlier detection thresholds
+        iqr_multiplier: 1.5
+        z_score_threshold: 3.0
+        modified_z_threshold: 3.5
+        
+        # Temporal consistency thresholds
+        max_year_to_year_temp_change: 5.0
+        max_year_to_year_precip_change: 500.0
+        
+        # Missing data thresholds
+        max_missing_overall: 5.0
+        max_missing_per_metric: 10.0
+        max_missing_per_county: 15.0
+        
+        # Output settings
+        save_plots: true
+        plot_dpi: 300
+        
+        # Validation modules
+        run_completeness_check: true
+        run_spatial_check: true
+        run_temporal_check: true
+        run_logical_check: true
+        run_plausibility_check: true
+        run_outlier_detection: true
+        run_visualization: true
+
+# Pipeline trigger configuration
+triggers:
+  - trigger_id: "manual_trigger"
+    trigger_type: "manual"
+    stages: ["climate_means"]
+    
+  - trigger_id: "means_complete"
+    trigger_type: "stage_complete"
+    source_stage: "climate_means"
+    target_stages: ["climate_metrics"]
+    
+  - trigger_id: "metrics_complete"
+    trigger_type: "stage_complete"
+    source_stage: "climate_metrics"
+    target_stages: ["validation"]
+
+# Processing profiles for common scenarios
+processing_profiles:
+  - profile_id: "full_pipeline"
+    profile_name: "Complete Processing Pipeline"
+    stages: ["climate_means", "climate_metrics", "validation"]
+    
+  - profile_id: "validation_only"
+    profile_name: "Validation Only"
+    stages: ["validation"]
+    stage_overrides:
+      validation:
+        stage_config:
+          metrics_output_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics/county_climate_metrics_complete.csv"
+
+# Environment-specific overrides
+environment_overrides:
+  development:
+    global_resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 8
+    
+    stage_overrides:
+      climate_means:
+        stage_config:
+          regions: ["CONUS"]
+          variables: ["tas"]
+          multiprocessing_workers: 4
+          
+      climate_metrics:
+        stage_config:
+          multiprocessing_workers: 4
+          
+      validation:
+        stage_config:
+          run_visualizations: false

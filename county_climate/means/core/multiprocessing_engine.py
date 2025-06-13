@@ -33,10 +33,10 @@ import threading
 from abc import ABC, abstractmethod
 
 # Import our modules
-from means.utils.io_util import NorESM2FileHandler
-from means.core.regions import REGION_BOUNDS, extract_region
-from means.utils.time_util import handle_time_coordinates
-from means.utils.rich_progress import RichProgressTracker
+from county_climate.means.utils.io_util import NorESM2FileHandler
+from county_climate.means.core.regions import REGION_BOUNDS, extract_region
+from county_climate.means.utils.time_util import handle_time_coordinates
+from county_climate.means.utils.rich_progress import RichProgressTracker
 
 # Setup logging
 logger = logging.getLogger(__name__)
