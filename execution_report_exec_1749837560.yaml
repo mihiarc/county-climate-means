@@ -1,0 +1,98 @@
+configuration:
+  base_data_path: !!python/object/apply:pathlib.PosixPath
+  - /
+  - media
+  - mihiarc
+  - RPA1TB
+  - CLIMATE_DATA
+  - NorESM2-LM
+  continue_on_stage_failure: false
+  created_at: 2025-06-13 17:59:20.706538+00:00
+  created_by: null
+  data_flows: []
+  description: null
+  enable_monitoring: true
+  environment: !!python/object/apply:county_climate.shared.config.integration_config.EnvironmentType
+  - testing
+  global_config: {}
+  global_resource_limits:
+    max_cpu_cores: 4
+    max_disk_space_gb: null
+    max_memory_gb: 16.0
+    max_processing_time_hours: null
+    priority: 1
+  global_retry_attempts: 3
+  health_check_interval_seconds: 60
+  log_path: null
+  monitoring_interval_seconds: 30
+  pipeline_id: test_hawaii_v2
+  pipeline_name: Test Hawaii with V2 Architecture
+  pipeline_version: 2.0.0
+  stages:
+  - data_transformations: []
+    depends_on: []
+    entry_point: means_stage_handler_v2
+    environment_overrides: {}
+    input_data_patterns: []
+    optional_depends_on: []
+    output_data_patterns: []
+    package_name: county_climate.means.integration
+    parallel_execution: true
+    resource_limits:
+      max_cpu_cores: 4
+      max_disk_space_gb: null
+      max_memory_gb: 16.0
+      max_processing_time_hours: null
+      priority: 1
+    retry_attempts: 3
+    retry_delay_seconds: 60.0
+    stage_config:
+      enable_progress_tracking: true
+      max_workers: 2
+      output_base_path: /tmp/climate_test_output/means
+      regions:
+      - HI
+      scenarios:
+      - historical
+      variables:
+      - tas
+      - pr
+    stage_id: climate_means_test
+    stage_name: Test Means Processing
+    stage_type: !!python/object/apply:county_climate.shared.config.integration_config.ProcessingStage
+    - means
+    trigger_type: !!python/object/apply:county_climate.shared.config.integration_config.TriggerType
+    - manual
+  tags: []
+  temp_data_path: !!python/object/apply:pathlib.PosixPath
+  - /
+  - tmp
+  - climate_processing_test
+  updated_at: null
+execution_summary:
+  completed_stages: 1
+  end_time: '2025-06-13T18:53:32.584844+00:00'
+  execution_id: exec_1749837560
+  failed_stages: 0
+  pipeline_id: test_hawaii_v2
+  start_time: '2025-06-13T17:59:20.932494+00:00'
+  status: cancelled
+  total_stages: 1
+generated_at: '2025-06-13T18:53:32.585494+00:00'
+stage_details:
+  climate_means_test:
+    attempt_number: 1
+    duration_seconds: 3251.652015
+    end_time: '2025-06-13T18:53:32.584739+00:00'
+    error_message: null
+    output_data_summary:
+      output_base_path: /tmp/climate_test_output/means
+      output_files: '[''/tmp/climate_test_output/means/pr/historical/pr_HI_historical_1980_30yr_normal.nc'',
+        ''/tmp/climate_...'
+      processing_stats: '{''total_tasks'': 1, ''successful_tasks'': 1, ''failed_tasks'':
+        0, ''total_processing_time'': 3251.646733283...'
+      results_by_task: '{''HI/historical'': {''region'': ''HI'', ''scenario'': ''historical'',
+        ''total_variables'': 2, ''successful_varia...'
+      status: completed
+    start_time: '2025-06-13T17:59:20.932724+00:00'
+    status: completed

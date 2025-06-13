@@ -1,0 +1,157 @@
+pipeline_id: "parallel_variables"
+pipeline_name: "Climate Processing with Parallel Variables Architecture"
+pipeline_version: "2.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/logs/parallel_variables.log"
+
+# Resource limits
+global_resource_limits:
+  max_memory_gb: 90.0
+  max_cpu_cores: 52
+  max_processing_time_hours: 48.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+
+stages:
+  # Phase 1: Climate Means Processing with Parallel Variables
+  - stage_id: "climate_means_parallel"
+    stage_type: "means"
+    stage_name: "Climate Means - Parallel Variables Architecture"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler_v2"
+    trigger_type: "manual"
+    
+    resource_limits:
+      max_memory_gb: 80.0
+      max_cpu_cores: 48
+      max_processing_time_hours: 36.0
+      priority: 10
+    
+    retry_attempts: 3
+    retry_delay_seconds: 300
+    
+    stage_config:
+      # All climate variables - will run in parallel
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # All US regions
+      regions: ["CONUS", "AK", "HI", "PRVI", "GU"]
+      
+      # All scenarios
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Processing parameters
+      max_workers: 4  # One worker per variable (or null for auto)
+      
+      # Progress tracking
+      enable_progress_tracking: true
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+
+  # Phase 2: County Metrics Processing
+  - stage_id: "county_metrics"
+    stage_type: "metrics"
+    stage_name: "County Metrics Processing"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    depends_on: ["climate_means_parallel"]
+    trigger_type: "dependency"
+    
+    resource_limits:
+      max_memory_gb: 40.0
+      max_cpu_cores: 24
+      max_processing_time_hours: 12.0
+      priority: 8
+    
+    retry_attempts: 2
+    retry_delay_seconds: 120
+    
+    stage_config:
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      regions: ["CONUS", "AK", "HI", "PRVI", "GU"]
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      metrics: ["mean", "std", "min", "max"]
+      percentiles: [10, 25, 50, 75, 90]
+      
+      multiprocessing_workers: 8
+      max_memory_per_worker_gb: 4.0
+      
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics"
+      output_formats: ["csv", "parquet", "netcdf"]
+
+  # Phase 3: Validation
+  - stage_id: "validation"
+    stage_type: "validation"
+    stage_name: "QA/QC Validation"
+    package_name: "county_climate.validation.integration"
+    entry_point: "validation_stage_handler"
+    depends_on: ["county_metrics"]
+    trigger_type: "dependency"
+    
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 8
+      max_processing_time_hours: 2.0
+      priority: 6
+    
+    stage_config:
+      output_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/validation"
+      validators_to_run: ["qaqc", "spatial", "precipitation"]
+      run_visualizations: true
+      
+      validation_config:
+        expected_counties: 3109
+        expected_scenarios: ["historical", "ssp245", "ssp585"]
+        
+        iqr_multiplier: 1.5
+        z_score_threshold: 3.0
+        modified_z_threshold: 3.5
+        
+        max_year_to_year_temp_change: 5.0
+        max_year_to_year_precip_change: 500.0
+        
+        max_missing_overall: 5.0
+        max_missing_per_metric: 10.0
+        max_missing_per_county: 15.0
+
+# Data flows
+data_flows:
+  - flow_id: "means_to_metrics"
+    source_stage: "climate_means_parallel"
+    target_stage: "county_metrics"
+    flow_type: "file"
+    data_format: "netcdf"
+    
+  - flow_id: "metrics_to_validation"
+    source_stage: "county_metrics"
+    target_stage: "validation"
+    flow_type: "file"
+    data_format: "mixed"
+
+# Metadata
+description: |
+  Refactored climate processing pipeline using parallel variables architecture.
+  
+  Key improvements:
+  - Variables process in parallel (no NetCDF file conflicts)
+  - Years process sequentially within each variable
+  - Better resource utilization and performance
+  - Cleaner code architecture
+  
+  Processing strategy:
+  - 4 parallel workers, one for each variable (pr, tas, tasmax, tasmin)
+  - Each worker processes all years sequentially for its variable
+  - No file access conflicts between workers
+  
+tags: ["production", "parallel-variables", "optimized", "v2"]
+created_by: "climate_processing_team"
+created_date: "2025-01-13"

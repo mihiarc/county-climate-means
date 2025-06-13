@@ -169,19 +169,43 @@ async def run_pipeline_command(args) -> bool:
 async def _register_stage_handlers_direct(orchestrator):
     """Register stage handlers for the pipeline runner."""
     
-    # Import real handlers - these should work now with fixed imports
+    # Import handlers
     from county_climate.means.integration import means_stage_handler, validation_stage_handler
     
-    # Register means and validation handlers
-    orchestrator.register_stage_handler(ProcessingStage.MEANS, means_stage_handler)
+    # Check if we should use the V2 parallel variables architecture
+    pipeline_config = orchestrator.config
+    use_v2_architecture = False
+    
+    # Check if any means stage specifies the V2 handler
+    for stage in pipeline_config.stages:
+        if stage.stage_type == ProcessingStage.MEANS and stage.entry_point == "means_stage_handler_v2":
+            use_v2_architecture = True
+            break
+    
+    if use_v2_architecture:
+        logger.info("🚀 Using V2 parallel variables architecture for means processing")
+        try:
+            from county_climate.means.integration.stage_handlers_v2 import means_stage_handler_v2
+            orchestrator.register_stage_handler(ProcessingStage.MEANS, means_stage_handler_v2)
+            logger.info("✅ Registered V2 means handler (parallel variables)")
+        except ImportError as e:
+            logger.warning(f"V2 means handler not available, falling back to original: {e}")
+            orchestrator.register_stage_handler(ProcessingStage.MEANS, means_stage_handler)
+            logger.info("✅ Registered original means handler")
+    else:
+        # Use original handler
+        orchestrator.register_stage_handler(ProcessingStage.MEANS, means_stage_handler)
+        logger.info("✅ Registered original means handler")
+    
+    # Register validation handler
     orchestrator.register_stage_handler(ProcessingStage.VALIDATION, validation_stage_handler)
-    logger.info("✅ Registered handlers: means, validation")
+    logger.info("✅ Registered validation handler")
     
     # Try to import metrics handler
     try:
         from county_climate.metrics.integration import metrics_stage_handler
         orchestrator.register_stage_handler(ProcessingStage.METRICS, metrics_stage_handler)
-        logger.info("✅ Registered real metrics handler")
+        logger.info("✅ Registered metrics handler")
     except ImportError as e:
         logger.warning(f"Metrics handler import failed: {e}")
         

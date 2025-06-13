@@ -1,0 +1,33 @@
+pipeline_id: "test_hawaii_v2"
+pipeline_name: "Test Hawaii with V2 Architecture"
+pipeline_version: "2.0.0"
+environment: "testing"
+
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing_test"
+
+global_resource_limits:
+  max_memory_gb: 16.0
+  max_cpu_cores: 4
+
+stages:
+  - stage_id: "climate_means_test"
+    stage_type: "means"
+    stage_name: "Test Means Processing"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler_v2"
+    trigger_type: "manual"
+    
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 4
+    
+    stage_config:
+      variables: ["tas", "pr"]  # Just 2 variables
+      regions: ["HI"]  # Just Hawaii
+      scenarios: ["historical"]  # Just historical
+      
+      max_workers: 2
+      enable_progress_tracking: true
+      
+      output_base_path: "/tmp/climate_test_output/means"
