@@ -1,0 +1,103 @@
+pipeline_id: "metrics_non_conus"
+pipeline_name: "County Climate Metrics - Non-CONUS Regions"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/var/log/climate/metrics_non_conus.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 90.0
+  max_cpu_cores: 56
+  max_processing_time_hours: 12.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  climate_normals_period: 30
+  output_format: "netcdf4"
+  compression_level: 4
+  enable_caching: true
+  cache_directory: "/tmp/climate_cache"
+
+# Pipeline stages
+stages:
+  # Climate Metrics Processing Stage for Non-CONUS regions
+  - stage_id: "climate_metrics"
+    stage_type: "metrics"
+    stage_name: "County-Level Climate Metrics - Non-CONUS"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 80.0
+      max_cpu_cores: 48
+      max_processing_time_hours: 8.0
+      priority: 10
+    
+    # Retry configuration
+    retry_attempts: 2
+    retry_delay_seconds: 180
+    
+    # Stage-specific configuration
+    stage_config:
+      # Input from climate means
+      input_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      
+      # Process non-CONUS regions
+      regions: ["AK", "HI", "PRVI", "GU"]
+      
+      # Process all variables
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # Climate scenarios
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # County boundaries
+      use_modern_county_format: true
+      county_boundaries_path: "county_climate/data/county_boundaries.parquet"
+      
+      # Processing parameters
+      multiprocessing_workers: 16
+      batch_size_counties: 50
+      max_memory_per_worker_gb: 4.0
+      
+      # Metrics to calculate
+      calculate_temperature_metrics: true
+      calculate_precipitation_metrics: true
+      calculate_extremes: true
+      calculate_seasonal_metrics: true
+      
+      # Quality settings
+      min_data_completeness_threshold: 0.90
+      validate_county_boundaries: true
+      
+      # Progress tracking
+      enable_rich_progress: true
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics"
+      output_formats: ["csv", "parquet", "netcdf"]
+      create_county_summaries: true
+      organize_by_region: true
+      
+      # Percentiles for metrics
+      percentiles: [5, 10, 25, 50, 75, 90, 95]
+
+# Pipeline trigger configuration
+triggers:
+  - trigger_id: "manual_trigger"
+    trigger_type: "manual"
+    stages: ["climate_metrics"]
+
+# Processing profiles
+processing_profiles:
+  - profile_id: "metrics_only"
+    profile_name: "Metrics Processing Only"
+    stages: ["climate_metrics"]

@@ -1,0 +1,123 @@
+pipeline_id: "validation_conus_precip"
+pipeline_name: "CONUS Precipitation Validation"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/var/log/climate/validation_conus_precip.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 16.0
+  max_cpu_cores: 8
+  max_processing_time_hours: 2.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  climate_normals_period: 30
+  output_format: "json"
+  enable_caching: true
+  cache_directory: "/tmp/climate_cache"
+
+# Pipeline stages
+stages:
+  # Validation Stage for CONUS Precipitation
+  - stage_id: "validation"
+    stage_type: "validation"
+    stage_name: "CONUS Precipitation QA/QC"
+    package_name: "county_climate.validation.integration"
+    entry_point: "validation_stage_handler_fixed"
+    trigger_type: "manual"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 8
+      max_processing_time_hours: 1.0
+      priority: 5
+    
+    # Retry configuration
+    retry_attempts: 1
+    retry_delay_seconds: 60
+    
+    # Stage-specific configuration
+    stage_config:
+      # Use a CONUS precipitation metrics file
+      metrics_output_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics/pr_CONUS_historical_1990_30yr_normal_county_metrics.csv"
+      
+      # Output directory for validation results
+      output_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/validation/conus_precipitation"
+      
+      # Validators to run
+      validators_to_run: ["precipitation", "qaqc", "spatial"]
+      
+      # Enable visualizations
+      run_visualizations: true
+      
+      # Validation configuration specific to CONUS
+      validation_config:
+        # Data expectations for CONUS
+        expected_counties: 3109  # CONUS has 3109 counties
+        expected_scenarios: ["historical"]
+        expected_region: "CONUS"
+        
+        # Focus on precipitation variable
+        focus_variable: "pr"
+        
+        # Precipitation-specific thresholds for CONUS
+        precipitation_thresholds:
+          min_annual_precipitation: 50.0     # mm (driest areas)
+          max_annual_precipitation: 5000.0   # mm (wettest areas)
+          max_precipitation_days_50mm: 365   # Days with >50mm precipitation
+          max_precipitation_days_100mm: 200  # Days with >100mm precipitation
+          
+        # Outlier detection thresholds
+        iqr_multiplier: 1.5        # Standard for CONUS
+        z_score_threshold: 3.0     # Standard threshold
+        modified_z_threshold: 3.5  # Standard MAD threshold
+        
+        # Temporal consistency thresholds
+        max_year_to_year_precip_change: 500.0  # mm
+        
+        # Missing data thresholds
+        max_missing_overall: 5.0
+        max_missing_per_metric: 10.0
+        max_missing_per_county: 15.0
+        
+        # CONUS-specific settings
+        conus_specific:
+          # Check for known dry/wet regions
+          validate_regional_patterns: true
+          # Desert vs coastal vs mountain patterns
+          check_elevation_patterns: true
+        
+        # Output settings
+        save_plots: true
+        plot_dpi: 300
+        create_summary_report: true
+        
+        # Validation modules to run
+        run_completeness_check: true
+        run_spatial_check: true
+        run_temporal_check: true
+        run_logical_check: true
+        run_plausibility_check: true
+        run_outlier_detection: true
+        run_visualization: true
+        run_precipitation_specific: true
+
+# Pipeline trigger configuration
+triggers:
+  - trigger_id: "manual_trigger"
+    trigger_type: "manual"
+    stages: ["validation"]
+
+# Processing profiles
+processing_profiles:
+  - profile_id: "validation_only"
+    profile_name: "Validation Only"
+    stages: ["validation"]

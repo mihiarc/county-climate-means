@@ -1,0 +1,107 @@
+# Template configuration for running Phase 2 (metrics) for a single region
+# Replace REGION_CODE with: AK, HI, PRVI, or GU
+
+pipeline_id: "phase2_metrics_REGION_CODE"
+pipeline_name: "Phase 2 - REGION_NAME County Metrics Processing"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/phase2_processing"
+log_path: "/tmp/phase2_processing/metrics_REGION_CODE.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 40.0
+  max_cpu_cores: 24
+  max_processing_time_hours: 6.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+
+# Pipeline stages
+stages:
+  # Climate Metrics Processing Stage
+  - stage_id: "climate_metrics_REGION_CODE"
+    stage_type: "metrics"
+    stage_name: "REGION_NAME County-Level Climate Metrics"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 32.0
+      max_cpu_cores: 20
+      max_processing_time_hours: 4.0
+      priority: 10
+    
+    # Stage configuration
+    stage_config:
+      # Input from Phase 1 - path to climate means outputs
+      input_means_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      
+      # Metrics to calculate
+      metrics: ["mean", "std", "min", "max", "percentiles"]
+      percentiles: [10, 25, 50, 75, 90, 95, 99]
+      
+      # County configuration
+      county_boundaries: "2024_census"
+      spatial_aggregation: "area_weighted_mean"
+      
+      # Processing parameters
+      multiprocessing_workers: 12
+      max_memory_per_worker_gb: 2.5
+      batch_size_counties: 100
+      
+      # IMPORTANT: Specify the region(s) to process
+      regions: ["REGION_CODE"]  # Replace with: AK, HI, PRVI, or GU
+      
+      # Variables to process (all available for the region)
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # Scenarios to process
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics/REGION_CODE"
+      output_formats: ["csv", "netcdf4", "parquet"]
+      create_county_summaries: true
+      
+      # Region-specific options
+      # For Alaska (AK):
+      #   handle_dateline_crossing: true
+      #   coordinate_transform: "wrap_longitude"
+      
+      # For Hawaii (HI), PRVI, Guam (GU):
+      #   min_grid_points: 1
+      #   use_nearest_neighbor_for_small_counties: true
+      
+      # Progress tracking
+      enable_rich_progress: true
+      show_region_progress: true
+
+# Monitoring configuration
+enable_monitoring: true
+monitoring_interval_seconds: 30
+health_check_interval_seconds: 60
+
+# Execution settings
+continue_on_stage_failure: false
+global_retry_attempts: 2
+
+# Region names mapping (for reference):
+# AK: Alaska
+# HI: Hawaii
+# PRVI: Puerto Rico and Virgin Islands  
+# GU: Guam and Northern Mariana Islands
+
+# Tags for organization
+tags:
+  - "phase2-only"
+  - "metrics"
+  - "REGION_CODE"
+  - "county-aggregation"

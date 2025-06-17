@@ -1,0 +1,93 @@
+# Configuration for running Phase 2 (metrics) for Hawaii, PRVI, and Guam
+# This assumes Phase 1 outputs already exist for these regions
+
+pipeline_id: "phase2_metrics_islands"
+pipeline_name: "Phase 2 - Island Territories County Metrics Processing"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/phase2_processing"
+log_path: "/tmp/phase2_processing/metrics_islands.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 30.0
+  max_cpu_cores: 16
+  max_processing_time_hours: 4.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+
+# Single stage - metrics only
+stages:
+  # Climate Metrics Processing Stage for Islands
+  - stage_id: "climate_metrics_islands"
+    stage_type: "metrics"
+    stage_name: "Island Territories County-Level Climate Metrics"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 24.0
+      max_cpu_cores: 12
+      max_processing_time_hours: 3.0
+      priority: 10
+    
+    # Stage configuration
+    stage_config:
+      # Input from Phase 1
+      input_means_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      
+      # Metrics to calculate
+      metrics: ["mean", "std", "min", "max", "percentiles"]
+      percentiles: [10, 25, 50, 75, 90, 95, 99]
+      
+      # County configuration
+      county_boundaries: "2024_census"
+      spatial_aggregation: "area_weighted_mean"
+      
+      # Processing parameters
+      multiprocessing_workers: 6
+      max_memory_per_worker_gb: 3.0
+      batch_size_counties: 25  # Smaller batches for islands
+      
+      # Variables and regions to process
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      regions: ["HI", "PRVI", "GU"]  # Hawaii, Puerto Rico/Virgin Islands, Guam
+      scenarios: ["historical", "ssp245", "ssp585"]
+      
+      # Output configuration
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics/islands"
+      output_formats: ["csv", "netcdf4", "parquet"]
+      create_county_summaries: true
+      
+      # Island-specific options
+      min_grid_points: 1  # Include small island counties with few grid points
+      use_nearest_neighbor_for_small_counties: true
+      
+      # Progress tracking
+      enable_rich_progress: true
+
+# Monitoring configuration
+enable_monitoring: true
+monitoring_interval_seconds: 30
+health_check_interval_seconds: 60
+
+# Execution settings
+continue_on_stage_failure: false
+global_retry_attempts: 2
+
+# Tags for organization
+tags:
+  - "phase2-only"
+  - "metrics"
+  - "islands"
+  - "hawaii"
+  - "prvi"
+  - "guam"

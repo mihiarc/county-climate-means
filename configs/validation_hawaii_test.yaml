@@ -1,0 +1,116 @@
+pipeline_id: "validation_hawaii_test"
+pipeline_name: "Hawaii Precipitation Validation Test"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "/var/log/climate/validation_hawaii_test.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 16.0
+  max_cpu_cores: 8
+  max_processing_time_hours: 1.0
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  climate_normals_period: 30
+  output_format: "json"
+  enable_caching: true
+  cache_directory: "/tmp/climate_cache"
+
+# Pipeline stages
+stages:
+  # Validation Stage for Hawaii Precipitation (as test)
+  - stage_id: "validation"
+    stage_type: "validation"
+    stage_name: "Hawaii Precipitation QA/QC Test"
+    package_name: "county_climate.validation.integration"
+    entry_point: "validation_stage_handler"
+    trigger_type: "manual"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 8
+      max_processing_time_hours: 1.0
+      priority: 5
+    
+    # Retry configuration
+    retry_attempts: 1
+    retry_delay_seconds: 60
+    
+    # Stage-specific configuration
+    stage_config:
+      # Use a specific Hawaii precipitation file
+      metrics_output_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics/HI/pr_HI_historical_1980_30yr_normal_HI_county_metrics.csv"
+      
+      # Output directory for validation results
+      output_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/validation/hawaii_test"
+      
+      # Validators to run
+      validators_to_run: ["precipitation", "qaqc", "spatial"]
+      
+      # Enable visualizations
+      run_visualizations: true
+      
+      # Validation configuration
+      validation_config:
+        # Data expectations for Hawaii
+        expected_counties: 5  # Hawaii has 5 counties
+        expected_scenarios: ["historical"]
+        expected_region: "HI"
+        
+        # Focus on precipitation variable
+        focus_variable: "pr"
+        
+        # Precipitation thresholds for Hawaii
+        precipitation_thresholds:
+          min_annual_precipitation: 200.0    # mm
+          max_annual_precipitation: 10000.0  # mm (Hawaii has extreme rainfall areas)
+          max_precipitation_days_50mm: 300   # Days with >50mm precipitation
+          max_precipitation_days_100mm: 150  # Days with >100mm precipitation
+          
+        # Outlier detection thresholds
+        iqr_multiplier: 2.0
+        z_score_threshold: 3.5
+        modified_z_threshold: 4.0
+        
+        # Temporal consistency thresholds
+        max_year_to_year_precip_change: 1000.0  # mm
+        
+        # Missing data thresholds
+        max_missing_overall: 5.0
+        max_missing_per_metric: 10.0
+        max_missing_per_county: 15.0
+        
+        # Output settings
+        save_plots: true
+        plot_dpi: 300
+        create_summary_report: true
+        
+        # Validation modules to run
+        run_completeness_check: true
+        run_spatial_check: true
+        run_temporal_check: true
+        run_logical_check: true
+        run_plausibility_check: true
+        run_outlier_detection: true
+        run_visualization: true
+        run_precipitation_specific: true
+
+# Pipeline trigger configuration
+triggers:
+  - trigger_id: "manual_trigger"
+    trigger_type: "manual"
+    stages: ["validation"]
+
+# Processing profiles
+processing_profiles:
+  - profile_id: "validation_only"
+    profile_name: "Validation Only"
+    stages: ["validation"]
