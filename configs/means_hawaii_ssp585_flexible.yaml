@@ -1,0 +1,93 @@
+pipeline_id: "means_hawaii_ssp585_flexible"
+pipeline_name: "Hawaii SSP585 Climate Means Processing (Flexible)"
+pipeline_version: "1.0.0"
+environment: "production"
+
+# Data paths
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+temp_data_path: "/tmp/climate_processing"
+log_path: "./hawaii_ssp585_flexible_processing.log"
+
+# Global resource limits
+global_resource_limits:
+  max_memory_gb: 40.0  # Less memory needed for smaller region
+  max_cpu_cores: 16   # Fewer cores needed
+  max_processing_time_hours: 2.0  # Much faster for Hawaii
+
+# Global configuration
+global_config:
+  data_source: "NEX-GDDP-CMIP6"
+  model: "NorESM2-LM"
+  climate_normals_period: 30
+  output_format: "netcdf4"
+  compression_level: 4
+  enable_caching: false
+
+# Pipeline stages
+stages:
+  # Climate Means Processing Stage using flexible handler
+  - stage_id: "climate_means"
+    stage_type: "means"
+    stage_name: "Hawaii SSP585 Climate Means (Flexible)"
+    package_name: "county_climate.means.integration"
+    entry_point: "flexible_means_stage_handler"  # Use flexible handler
+    trigger_type: "manual"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 30.0
+      max_cpu_cores: 12
+      max_processing_time_hours: 1.0
+      priority: 10
+    
+    # Retry configuration
+    retry_attempts: 2
+    retry_delay_seconds: 60
+    
+    # Stage-specific configuration
+    stage_config:
+      # Process SSP585 for Hawaii only
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      regions: ["HI"]  # Hawaii - much smaller than CONUS
+      scenarios: ["ssp585"]  # This will actually process SSP585!
+      
+      # Climate model configuration
+      model_id: "NorESM2-LM"
+      
+      # Performance settings adjusted for smaller region
+      multiprocessing_workers: 12
+      batch_size_years: 15  # Larger batches OK for smaller region
+      max_memory_per_worker_gb: 2.0
+      enable_rich_progress: true
+      
+      # Output paths
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      
+    # Output configuration
+    output_config:
+      base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means"
+      create_manifest: true
+      overwrite_existing: false
+      file_naming_pattern: "{variable}_{region}_{scenario}_{target_year}_{period_type}_climate_normal.nc"
+
+# Pipeline execution settings
+execution_config:
+  mode: "sequential"
+  stop_on_error: false
+  enable_checkpointing: true
+  checkpoint_interval_minutes: 2
+  restart_from_checkpoint: false
+  
+# Monitoring configuration
+monitoring_config:
+  enable_resource_monitoring: true
+  monitoring_interval_seconds: 10
+  alert_on_resource_threshold: true
+  resource_alert_thresholds:
+    memory_percent: 85
+    cpu_percent: 90
+  
+# Notification settings
+notification_config:
+  enable_notifications: false
+  notification_types: ["email", "slack"]

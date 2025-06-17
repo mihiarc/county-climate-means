@@ -170,19 +170,35 @@ async def _register_stage_handlers_direct(orchestrator):
     """Register stage handlers for the pipeline runner."""
     
     # Import handlers
-    from county_climate.means.integration import means_stage_handler, validation_stage_handler
+    from county_climate.means.integration import means_stage_handler
+    from county_climate.validation.integration import validation_stage_handler
     
-    # Check if we should use the V2 parallel variables architecture
+    # Check if we should use special handlers
     pipeline_config = orchestrator.config
     use_v2_architecture = False
+    use_flexible_architecture = False
     
-    # Check if any means stage specifies the V2 handler
+    # Check if any means stage specifies a special handler
     for stage in pipeline_config.stages:
-        if stage.stage_type == ProcessingStage.MEANS and stage.entry_point == "means_stage_handler_v2":
-            use_v2_architecture = True
-            break
+        if stage.stage_type == ProcessingStage.MEANS:
+            if stage.entry_point == "means_stage_handler_v2":
+                use_v2_architecture = True
+                break
+            elif stage.entry_point == "flexible_means_stage_handler":
+                use_flexible_architecture = True
+                break
     
-    if use_v2_architecture:
+    if use_flexible_architecture:
+        logger.info("🚀 Using flexible architecture for means processing (supports SSP585)")
+        try:
+            from county_climate.means.integration.flexible_stage_handlers import flexible_means_stage_handler
+            orchestrator.register_stage_handler(ProcessingStage.MEANS, flexible_means_stage_handler)
+            logger.info("✅ Registered flexible means handler (multi-scenario support)")
+        except ImportError as e:
+            logger.warning(f"Flexible means handler not available, falling back to original: {e}")
+            orchestrator.register_stage_handler(ProcessingStage.MEANS, means_stage_handler)
+            logger.info("✅ Registered original means handler")
+    elif use_v2_architecture:
         logger.info("🚀 Using V2 parallel variables architecture for means processing")
         try:
             from county_climate.means.integration.stage_handlers_v2 import means_stage_handler_v2
