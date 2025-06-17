@@ -79,4 +79,31 @@ processing_status_report.pdf
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Project-specific temporary/test files
+analyze_*.py
+debug_*.py
+test_*.py
+validate_*.py
+run_*.py
+fix_*.py
+process_*.py
+reorganize_*.py
+cleanup_*.py
+start_*.py
+check_*.py
+execution_report_*.yaml
+*_coordinate_fix.py
+*_manifest.py
+climate_api.db
+site/
+api/
+validation_outputs_enhanced/
+VALIDATION_UPDATE_SUMMARY.md
+
+# Keep important docs
+!README.md
+!CLAUDE.md
+!CITATION.md
+!docs/**/*.md 
