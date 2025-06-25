@@ -1,0 +1,111 @@
+# Test configuration using the new organized output structure
+# Smaller scale for testing the organized directory hierarchy
+
+pipeline_id: "test_organized_output"
+pipeline_name: "Test Pipeline with Organized Output"
+description: "Test configuration for verifying organized output structure"
+version: "1.0.0"
+created_by: "Climate Pipeline Team"
+created_date: "2024-12-17"
+
+# Global pipeline settings
+global_config:
+  # Use environment variable or default to organized structure
+  base_output_path: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}"
+  output_version: "${CLIMATE_OUTPUT_VERSION:-v1.0}"
+  base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+  enable_checkpointing: false
+  
+  # Performance settings for testing
+  max_parallel_stages: 1
+  stage_timeout_minutes: 60
+  
+  # Logging
+  log_level: "DEBUG"
+  log_dir: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}/logs/test"
+
+# Pipeline stages - minimal test configuration
+stages:
+  - stage_id: "climate_means_test"
+    stage_type: "means"
+    description: "Test climate means calculation"
+    enabled: true
+    dependencies: []
+    
+    # Reduced resources for testing
+    resource_limits:
+      max_memory_gb: 16.0
+      max_cpu_cores: 4
+      max_runtime_minutes: 30
+    
+    # Test configuration - single region/variable
+    stage_config:
+      # Test with one variable and region
+      variables: ["tas"]
+      regions: ["CONUS"]
+      scenarios: ["historical"]
+      
+      # Output will go to organized structure
+      output_base_path: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}/${CLIMATE_OUTPUT_VERSION:-v1.0}/L1_climate_means"
+      
+      # Reduced processing parameters
+      multiprocessing_workers: 4
+      batch_size_years: 5
+      max_memory_per_worker_gb: 3.5
+      enable_rich_progress: true
+      
+      # Test years only
+      year_ranges:
+        historical: [1980, 1990]  # Just 1980s for testing
+    
+  - stage_id: "climate_metrics_test"
+    stage_type: "metrics"
+    description: "Test county metrics calculation"
+    enabled: true
+    dependencies: ["climate_means_test"]
+    
+    resource_limits:
+      max_memory_gb: 8.0
+      max_cpu_cores: 2
+      max_runtime_minutes: 15
+    
+    stage_config:
+      # Use organized input/output paths
+      input_means_path: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}/${CLIMATE_OUTPUT_VERSION:-v1.0}/L1_climate_means"
+      output_base_path: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}/${CLIMATE_OUTPUT_VERSION:-v1.0}/L2_county_metrics"
+      
+      variables: ["tas"]
+      metrics: ["mean", "std"]
+      percentiles: [50]
+      
+      # Single output format for testing
+      output_formats: ["csv"]
+      
+  - stage_id: "validation_test"
+    stage_type: "validation"
+    description: "Test validation"
+    enabled: true
+    dependencies: ["climate_metrics_test"]
+    
+    resource_limits:
+      max_memory_gb: 4.0
+      max_cpu_cores: 1
+      max_runtime_minutes: 10
+    
+    stage_config:
+      metrics_output_path: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}/${CLIMATE_OUTPUT_VERSION:-v1.0}/L2_county_metrics"
+      output_dir: "${CLIMATE_OUTPUT_BASE:-/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized}/${CLIMATE_OUTPUT_VERSION:-v1.0}/L3_validation"
+      
+      # Run minimal validation
+      validators_to_run: ["qaqc"]
+      
+      validation_config:
+        completeness_threshold: 0.9
+        
+      # Skip visualizations for test
+      generate_maps: false
+      generate_timeseries: false
+
+metadata:
+  tags: ["test", "organized-output", "minimal"]
+  notes: "Minimal test configuration for organized output structure"

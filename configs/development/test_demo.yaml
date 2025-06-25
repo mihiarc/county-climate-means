@@ -1,0 +1,66 @@
+# Demo configuration for testing without real data
+# This creates a minimal test to verify the pipeline works
+
+pipeline_id: "test_demo"
+pipeline_name: "Demo Test Pipeline"
+description: "Minimal test pipeline for demonstration"
+version: "1.0.0"
+created_by: "Development"
+created_date: "2025-06-25"
+
+# Global pipeline settings
+global_config:
+  # Use local test directories
+  base_output_path: "./output/demo"
+  output_version: "v1.0"
+  base_data_path: "./test_data/demo"
+  enable_checkpointing: false
+  
+  # Minimal resources
+  max_parallel_stages: 1
+  stage_timeout_minutes: 10
+  
+  # Logging
+  log_level: "INFO"
+  log_dir: "./output/demo/logs"
+
+# Only run validation stage with test data
+stages:
+  - stage_id: "validation_demo"
+    stage_type: "validation"
+    description: "Demo validation stage"
+    enabled: true
+    dependencies: []
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 4.0
+      max_cpu_cores: 2
+      max_runtime_minutes: 5
+    
+    # Stage configuration
+    stage_config:
+      # Create test metrics output
+      metrics_output_path: "./test_data/demo/metrics"
+      output_dir: "./output/demo/L3_validation"
+      
+      # Run minimal validators
+      validators_to_run: ["qaqc"]
+      
+      # Minimal validation config
+      validation_config:
+        completeness_threshold: 0.90
+        spatial_consistency_check: false
+        temporal_consistency_check: false
+        
+      # Skip visualizations for demo
+      generate_maps: false
+      generate_timeseries: false
+      generate_distributions: false
+
+# Pipeline metadata
+metadata:
+  tags: ["demo", "test", "minimal"]
+  notes: |
+    This is a minimal demo configuration that runs without real climate data.
+    It creates test data to demonstrate the pipeline functionality.

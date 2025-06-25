@@ -1,0 +1,77 @@
+# Test configuration for local development
+# Uses test data paths and reduced processing scope
+
+pipeline_id: "test_local"
+pipeline_name: "Local Test Pipeline"
+description: "Test pipeline for development with minimal data"
+version: "1.0.0"
+created_by: "Development"
+created_date: "2025-06-25"
+
+# Global pipeline settings
+global_config:
+  # Base paths - using test directories
+  base_output_path: "./output/test"
+  output_version: "test"
+  base_data_path: "./test_data"
+  enable_checkpointing: true
+  checkpoint_dir: "./output/test/checkpoints"
+  
+  # Performance settings - reduced for testing
+  max_parallel_stages: 1
+  stage_timeout_minutes: 60
+  
+  # Logging
+  log_level: "DEBUG"
+  log_dir: "./output/test/logs"
+
+# Pipeline stages - only test means for now
+stages:
+  - stage_id: "climate_means"
+    stage_type: "means"
+    description: "Test climate means calculation"
+    enabled: true
+    dependencies: []
+    
+    # Resource limits - minimal for testing
+    resource_limits:
+      max_memory_gb: 8.0
+      max_cpu_cores: 4
+      max_runtime_minutes: 30
+    
+    # Stage configuration
+    stage_config:
+      # Test with minimal data
+      variables: ["tas"]
+      regions: ["CONUS"]
+      scenarios: ["historical"]
+      
+      # Output path
+      output_base_path: "./output/test/L1_climate_means"
+      
+      # Processing parameters - minimal
+      multiprocessing_workers: 2
+      batch_size_years: 5
+      max_memory_per_worker_gb: 2.0
+      enable_rich_progress: true
+      
+      # Disable parallel processing for testing
+      enable_parallel_regions: false
+      enable_parallel_variables: false
+    
+    # Output contract
+    outputs:
+      - output_id: "test_means_output"
+        output_type: "netcdf_files"
+        data_contract:
+          file_pattern: "{variable}_{region}_{scenario}_{period}_30yr_mean.nc"
+          required_variables: ["tas"]
+          spatial_coverage: ["CONUS"]
+          temporal_coverage: "30-year normals"
+
+# Pipeline metadata
+metadata:
+  tags: ["test", "development", "local"]
+  notes: |
+    This configuration is for local testing only.
+    It processes minimal data to verify the pipeline works.

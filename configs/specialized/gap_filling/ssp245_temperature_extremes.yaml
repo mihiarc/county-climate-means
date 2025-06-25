@@ -1,0 +1,156 @@
+# Configuration to process missing temperature extremes for SSP245
+# This will complete the remaining 50% of SSP245 climate means processing
+
+pipeline_id: "ssp245_temperature_extremes"
+pipeline_name: "SSP245 Temperature Extremes Processing"
+description: "Process missing tasmax and tasmin variables for SSP245 scenario across all regions"
+version: "1.0.0"
+created_by: "Climate Pipeline Team"
+created_date: "2024-12-17"
+
+# Base data path (required at top level)
+base_data_path: "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
+
+# Global pipeline settings
+global_config:
+  # Use organized output structure
+  base_output_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized"
+  output_version: "v1.0"
+  enable_checkpointing: true
+  checkpoint_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized/checkpoints/ssp245_extremes"
+  
+  # Performance settings
+  max_parallel_stages: 1
+  stage_timeout_minutes: 720  # 12 hours
+  
+  # Logging
+  log_level: "INFO"
+  log_dir: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized/logs/ssp245_extremes"
+
+# Pipeline stages
+stages:
+  - stage_id: "climate_means_extremes"
+    stage_type: "means"
+    stage_name: "SSP245 Temperature Extremes Processing"
+    package_name: "county_climate.means.integration"
+    entry_point: "means_stage_handler"
+    description: "Calculate 30-year climate normals for temperature extremes"
+    enabled: true
+    dependencies: []
+    trigger_type: "manual"
+    
+    # Resource limits - optimized for temperature processing
+    resource_limits:
+      max_memory_gb: 60.0
+      max_cpu_cores: 40
+      max_runtime_minutes: 480  # 8 hours
+    
+    # Stage configuration - ONLY missing variables
+    stage_config:
+      # Only process the missing temperature extremes
+      variables: ["tasmax", "tasmin"]
+      
+      # Process all regions
+      regions: ["CONUS", "AK", "HI", "PRVI", "GU"]
+      
+      # Only SSP245 scenario (what's missing)
+      scenarios: ["ssp245"]
+      
+      # Output path - organized structure
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized/v1.0/L1_climate_means"
+      
+      # High-performance processing parameters
+      multiprocessing_workers: 40
+      batch_size_years: 10
+      max_memory_per_worker_gb: 1.5
+      enable_rich_progress: true
+      
+      # Enable parallel processing for efficiency
+      enable_parallel_regions: true
+      enable_parallel_variables: true
+      max_parallel_regions: 2
+      max_parallel_variables: 2  # Process both tasmax and tasmin together
+      
+      # Optional: Process specific year ranges if needed
+      # year_ranges:
+      #   ssp245: [2015, 2100]  # Full range
+    
+    # Output contract
+    outputs:
+      - output_id: "temperature_extremes_output"
+        output_type: "netcdf_files"
+        data_contract:
+          file_pattern: "{variable}_{region}_{scenario}_{period}_30yr_mean.nc"
+          required_variables: ["tasmax", "tasmin"]
+          spatial_coverage: ["CONUS", "AK", "HI", "PRVI", "GU"]
+          temporal_coverage: "30-year normals for 2015-2100"
+
+# Optional: Add metrics stage to process ALL ssp245 data once means are complete
+  - stage_id: "climate_metrics_ssp245"
+    stage_type: "metrics"
+    stage_name: "SSP245 County Metrics"
+    package_name: "county_climate.metrics.integration"
+    entry_point: "metrics_stage_handler"
+    description: "Calculate county-level metrics for all SSP245 variables"
+    enabled: false  # Temporarily disabled due to import issues
+    dependencies: ["climate_means_extremes"]
+    trigger_type: "dependency"
+    
+    # Resource limits
+    resource_limits:
+      max_memory_gb: 40.0
+      max_cpu_cores: 16
+      max_runtime_minutes: 240  # 4 hours
+    
+    # Stage configuration
+    stage_config:
+      # Input from organized structure (will include newly processed files)
+      input_means_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized/v1.0/L1_climate_means"
+      
+      # Output to organized structure
+      output_base_path: "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized/v1.0/L2_county_metrics"
+      
+      # Process all variables for SSP245
+      variables: ["pr", "tas", "tasmax", "tasmin"]
+      
+      # Filter for only SSP245 files
+      scenario_filter: "ssp245"
+      
+      # Metrics to calculate
+      metrics: ["mean", "std", "min", "max"]
+      percentiles: [5, 10, 25, 50, 75, 90, 95]
+      
+      # Output formats
+      output_formats: ["csv", "parquet"]
+      
+      # Processing options
+      use_modern_boundaries: true
+      weighted_by_area: true
+      include_metadata: true
+    
+    # Output contract
+    outputs:
+      - output_id: "county_metrics_ssp245"
+        output_type: "tabular_data"
+        data_contract:
+          file_formats: ["csv", "parquet"]
+          required_columns: ["GEOID", "NAME", "variable", "metric", "value", "scenario", "period"]
+          spatial_resolution: "county"
+          scenario: "ssp245"
+
+# Pipeline metadata
+metadata:
+  tags: ["ssp245", "temperature-extremes", "gap-filling"]
+  notes: |
+    This configuration specifically targets the missing temperature extremes
+    (tasmax and tasmin) for the SSP245 scenario. It will complete the 
+    remaining 50% of SSP245 means processing.
+    
+    After means processing completes, it will optionally run metrics
+    calculation for ALL SSP245 variables (including the previously
+    processed pr and tas).
+    
+    Expected outputs:
+    - 10 new means tasks (tasmax and tasmin for 5 regions)
+    - ~850 new NetCDF files (85-86 years × 2 variables × 5 regions)
+    - County metrics for all 4 variables if metrics stage is enabled

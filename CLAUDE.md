@@ -2,11 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## 🌍 Project Overview
 
 County Climate is a sophisticated Python package for processing climate data and calculating 30-year climate normals from NEX-GDDP-CMIP6 climate model data. It supports county-level climate analysis across multiple U.S. regions with both means (normals) and metrics (statistics) calculations.
 
-## Architecture
+This project implements a high-performance climate data processing pipeline for computing rolling 30-year climate normals from NorESM2-LM climate model data. The system processes multiple climate variables across different scenarios and geographic regions, with optimized multiprocessing capabilities and comprehensive monitoring.
+
+## 📊 Architecture
 
 The project follows a modular, pipeline-based architecture:
 
@@ -19,6 +21,15 @@ Key design patterns:
 - Configuration-driven orchestration (YAML-based)
 - Multiprocessing support optimized for high-memory systems (95GB/56 cores)
 - Rich progress tracking with real-time system stats
+
+### Core Processing Modules
+
+| Module | Purpose | Key Features |
+|--------|---------|---------------|
+| `climate_means.py` | Core climate calculations | Sequential processing, climate normal computation, crash resistance |
+| `climate_multiprocessing.py` | High-performance processing | 6-worker optimization, 4.3x speedup, memory management |
+| `process_all_climate_normals.py` | Sequential pipeline | Comprehensive processing, all variables/periods |
+| `process_climate_normals_multiprocessing.py` | MP pipeline | 24-core utilization, progress tracking, resume capability |
 
 ## Common Commands
 
@@ -89,27 +100,38 @@ pip install -e .[all]
 pip install -e .[dev]
 ```
 
-## Pipeline Stages
+## 🔄 Pipeline Stages & Data Flow
 
-1. **Stage 1: Climate Means Processing**
-   - Calculates 30-year climate normals
-   - Variables: pr, tas, tasmax, tasmin
-   - Regions: CONUS, Alaska, Hawaii, PRVI, Guam
-   - Scenarios: historical, ssp245, ssp585
+### Stage 1: Climate Means Processing
+- Calculates 30-year climate normals
+- Variables: pr (precipitation), tas (temperature), tasmax, tasmin
+- Regions: CONUS, Alaska, Hawaii, PRVI, Guam
+- Scenarios: historical (1980-2014), ssp245, ssp585
+- Periods:
+  - Historical: 1980-2014 (historical data only)
+  - Hybrid: 2015-2044 (historical + SSP245)
+  - Future: 2045-2100 (SSP245 only)
 
-2. **Stage 2: Climate Metrics**
-   - County-level statistics (mean, std, min, max, percentiles)
-   - Area-weighted aggregation
-   - Uses modern GeoParquet format for county boundaries
+### Stage 2: Climate Metrics
+- County-level statistics (mean, std, min, max, percentiles)
+- Area-weighted aggregation
+- Uses modern GeoParquet format for county boundaries
 
-3. **Stage 3: Validation (QA/QC)**
-   - Comprehensive quality assurance and control
-   - Validators:
-     - **QAQCValidator**: Data completeness, temporal/spatial consistency, logical relationships
-     - **SpatialOutliersValidator**: Geographic outlier detection using IQR, Z-score methods
-     - **PrecipitationValidator**: Precipitation-specific data quality checks
-   - Visualization suite for analysis and reporting
-   - Generates quality scores and validation reports
+### Stage 3: Validation (QA/QC)
+- Comprehensive quality assurance and control
+- Validators:
+  - **QAQCValidator**: Data completeness, temporal/spatial consistency, logical relationships
+  - **SpatialOutliersValidator**: Geographic outlier detection using IQR, Z-score methods
+  - **PrecipitationValidator**: Precipitation-specific data quality checks
+- Visualization suite for analysis and reporting
+- Generates quality scores and validation reports
+
+### Data Flow
+1. **Input**: NEX-GDDP-CMIP6 NetCDF files by variable/scenario
+2. **Phase 1**: Regional extraction → 30-year normal calculation
+3. **Phase 2**: County aggregation → Metrics calculation
+4. **Phase 3**: QA/QC validation → Quality reports → Visualizations
+5. **Output**: NetCDF files with climate normals/metrics, CSV/Parquet exports, validation reports
 
 ## Key Files and Entry Points
 
@@ -136,13 +158,20 @@ pipeline:
         enable_rich_progress: true
 ```
 
-## Data Flow
+## 📂 Output Structure
 
-1. **Input**: NEX-GDDP-CMIP6 NetCDF files by variable/scenario
-2. **Phase 1**: Regional extraction → 30-year normal calculation
-3. **Phase 2**: County aggregation → Metrics calculation
-4. **Phase 3**: QA/QC validation → Quality reports → Visualizations
-5. **Output**: NetCDF files with climate normals/metrics, CSV/Parquet exports, validation reports
+```
+output/rolling_30year_climate_normals/
+├── pr/
+│   ├── historical/
+│   │   ├── pr_CONUS_historical_YYYY_30yr_normal.nc
+│   │   └── pr_CONUS_historical_1980-2014_all_normals.nc
+│   ├── hybrid/
+│   └── ssp245/
+├── tas/
+├── tasmax/
+└── tasmin/
+```
 
 ## County Boundaries
 
@@ -160,11 +189,28 @@ The project now uses modern GeoParquet format for county boundaries:
   - `test_config_integration.py`: Configuration system
   - `test_contracts.py`: Data contracts validation
 
-## Performance Considerations
+## 🚀 Performance Metrics & Optimization
 
-- Multiprocessing optimized for 56 cores/95GB RAM systems
-- Memory-aware processing with configurable limits
-- Rich progress tracking enabled by default (disable with `enable_rich_progress: false`)
+### Multiprocessing Optimization Results
+
+| Configuration | Time | Speedup | Efficiency | Throughput |
+|---------------|------|---------|------------|------------|
+| Sequential (1 worker) | 15.4s | 1.0x | 100% | 0.32 files/s |
+| **Optimal (6 workers)** | **3.6s** | **4.3x** | **72%** | **1.41 files/s** |
+| Excessive (8+ workers) | 3.6s | 4.3x | <54% | ~1.40 files/s |
+
+### System Requirements
+- **CPU**: 24+ cores recommended (56 cores optimal)
+- **RAM**: 80GB+ for optimal performance (95GB recommended)
+- **Storage**: High-performance SSD for NetCDF I/O
+- **Python**: 3.8+ with scientific computing stack
+
+### Key Parameters
+- `MAX_CORES`: 24 (total system utilization)
+- `CORES_PER_VARIABLE`: 6 (optimal from testing)
+- `BATCH_SIZE_YEARS`: 2 (memory management)
+- `MAX_MEMORY_PER_PROCESS_GB`: 4 (conservative limit)
+- `MIN_YEARS_FOR_NORMAL`: 25 (minimum for climate normal)
 
 ## Regional Processing
 
@@ -172,6 +218,30 @@ Special handling for:
 - Alaska: Dateline coordinate wrapping
 - Hawaii/PRVI/Guam: Island-specific bounds
 - CONUS: Continental US processing
+
+## 📊 Data Sources
+
+- **Model**: NorESM2-LM (Norwegian Earth System Model) / NEX-GDDP-CMIP6
+- **Variables**: 
+  - `pr`: Precipitation (kg m⁻² s⁻¹)
+  - `tas`: Near-surface air temperature (K)
+  - `tasmax`: Daily maximum temperature (K)
+  - `tasmin`: Daily minimum temperature (K)
+- **Scenarios**: 
+  - `historical`: 1850-2014
+  - `ssp245`: 2015-2100 (Shared Socioeconomic Pathway 2-4.5)
+  - `ssp585`: 2015-2100 (Shared Socioeconomic Pathway 5-8.5)
+- **Regions**: CONUS, Alaska, Hawaii, Puerto Rico & VI, Guam & CNMI
+
+## 🎯 Project Achievements
+
+- ✅ **High Performance**: 4.3x speedup with multiprocessing optimization
+- ✅ **Comprehensive Coverage**: All 4 variables × 3 periods × 5 regions
+- ✅ **Robust Processing**: Crash resistance, memory management, resume capability
+- ✅ **Real-time Monitoring**: Progress tracking, performance metrics, status updates
+- ✅ **Scientific Quality**: 30-year climate normals following WMO standards
+- ✅ **Modular Design**: Clean separation of concerns, reusable components
+- ✅ **Production Ready**: Optimized for large-scale climate data processing
 
 ## Cursor Rules
 

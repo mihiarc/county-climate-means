@@ -13,15 +13,26 @@ from typing import Dict, Any, Optional
 import yaml
 from dataclasses import dataclass, field
 
+# Import the new organized output paths
+try:
+    from county_climate.shared.config.output_paths import OrganizedOutputPaths
+except ImportError:
+    # Fallback if import fails
+    OrganizedOutputPaths = None
+
 logger = logging.getLogger(__name__)
 
 @dataclass
 class DataPaths:
     """Data path configuration."""
     input_data_dir: str = "/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM"
-    output_base_dir: str = "output"
+    output_base_dir: str = "/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/organized"
     
-    # Regional output directories
+    # Use organized output structure
+    use_organized_structure: bool = True
+    output_version: str = "v1.0"
+    
+    # Legacy regional output directories (for backward compatibility)
     conus_output_dir: str = "output/conus_normals"
     alaska_output_dir: str = "output/alaska_normals"
     hawaii_output_dir: str = "output/hawaii_normals"
@@ -41,13 +52,53 @@ class DataPaths:
         # Convert to Path objects
         self.input_data_dir = Path(self.input_data_dir)
         self.output_base_dir = Path(self.output_base_dir)
-        self.conus_output_dir = Path(self.conus_output_dir)
-        self.alaska_output_dir = Path(self.alaska_output_dir)
-        self.hawaii_output_dir = Path(self.hawaii_output_dir)
-        self.prvi_output_dir = Path(self.prvi_output_dir)
-        self.guam_output_dir = Path(self.guam_output_dir)
-        self.validation_output_dir = Path(self.validation_output_dir)
-        self.visualization_output_dir = Path(self.visualization_output_dir)
+        
+        # Initialize organized paths if enabled
+        if self.use_organized_structure and OrganizedOutputPaths:
+            self._organized_paths = OrganizedOutputPaths(
+                base_path=str(self.output_base_dir),
+                version=self.output_version
+            )
+        else:
+            self._organized_paths = None
+            # Use legacy paths
+            self.conus_output_dir = Path(self.conus_output_dir)
+            self.alaska_output_dir = Path(self.alaska_output_dir)
+            self.hawaii_output_dir = Path(self.hawaii_output_dir)
+            self.prvi_output_dir = Path(self.prvi_output_dir)
+            self.guam_output_dir = Path(self.guam_output_dir)
+            self.validation_output_dir = Path(self.validation_output_dir)
+            self.visualization_output_dir = Path(self.visualization_output_dir)
+    
+    def get_means_output_path(self, scenario: str, region: str) -> Path:
+        """Get output path for climate means using organized structure."""
+        if self._organized_paths:
+            return self._organized_paths.get_means_output_path(scenario, region)
+        else:
+            # Fallback to legacy structure
+            return self.get_regional_output_dir_legacy(region) / scenario
+    
+    def get_means_filename(self, variable: str, region: str, scenario: str, 
+                          start_year: int, end_year: Optional[int] = None) -> str:
+        """Get standardized filename for climate means."""
+        if self._organized_paths:
+            return self._organized_paths.get_means_filename(
+                variable, region, scenario, start_year, end_year
+            )
+        else:
+            # Legacy naming convention
+            return f"{variable}_{region}_{scenario}_{start_year}_30yr_normal.nc"
+    
+    def get_regional_output_dir_legacy(self, region_key: str) -> Path:
+        """Get legacy regional output directory."""
+        region_dirs = {
+            'CONUS': self.conus_output_dir,
+            'AK': self.alaska_output_dir,
+            'HI': self.hawaii_output_dir,
+            'PRVI': self.prvi_output_dir,
+            'GU': self.guam_output_dir,
+        }
+        return region_dirs.get(region_key, self.output_base_dir)
 
 @dataclass
 class OutputConfig:
@@ -313,15 +364,21 @@ class ClimateConfig:
     
     def get_regional_output_dir(self, region_key: str) -> Path:
         """Get the output directory for a specific region."""
-        region_dirs = {
-            'CONUS': self.paths.conus_output_dir,
-            'AK': self.paths.alaska_output_dir,
-            'HI': self.paths.hawaii_output_dir,
-            'PRVI': self.paths.prvi_output_dir,
-            'GU': self.paths.guam_output_dir,
-        }
-        
-        return region_dirs.get(region_key, self.paths.output_base_dir)
+        if self.paths.use_organized_structure and hasattr(self.paths, '_organized_paths') and self.paths._organized_paths:
+            # Use organized structure - return base means directory
+            # The actual scenario/region subdirectory will be created by get_means_output_path
+            return self.paths._organized_paths.climate_means_base
+        else:
+            # Legacy structure
+            region_dirs = {
+                'CONUS': self.paths.conus_output_dir,
+                'AK': self.paths.alaska_output_dir,
+                'HI': self.paths.hawaii_output_dir,
+                'PRVI': self.paths.prvi_output_dir,
+                'GU': self.paths.guam_output_dir,
+            }
+            
+            return region_dirs.get(region_key, self.paths.output_base_dir)
 
 
 # Global configuration instance

@@ -56,9 +56,12 @@ async def metrics_stage_handler(**context) -> Dict[str, Any]:
             '/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means'
         ))
     
+    # Use organized output structure
+    from county_climate.shared.config.output_paths import OrganizedOutputPaths
+    organized_paths = OrganizedOutputPaths()
     output_base_path = Path(stage_config.get(
         'output_base_path',
-        '/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/metrics'
+        str(organized_paths.county_metrics_base)
     ))
     
     # Create output directory

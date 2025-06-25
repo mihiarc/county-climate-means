@@ -77,7 +77,11 @@ async def means_stage_handler(**context) -> Dict[str, Any]:
         
         # Paths
         input_base_path = Path(pipeline_context.get('base_data_path', '/media/mihiarc/RPA1TB/CLIMATE_DATA/NorESM2-LM'))
-        output_base_path = Path(stage_config.get('output_base_path', '/media/mihiarc/RPA1TB/CLIMATE_OUTPUT/means'))
+        
+        # Use organized output structure
+        from county_climate.shared.config.output_paths import OrganizedOutputPaths
+        organized_paths = OrganizedOutputPaths()
+        output_base_path = Path(stage_config.get('output_base_path', str(organized_paths.climate_means_base)))
         
         # Create output directory
         output_base_path.mkdir(parents=True, exist_ok=True)
