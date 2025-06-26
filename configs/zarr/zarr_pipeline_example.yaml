@@ -1,0 +1,204 @@
+# Zarr-based Climate Pipeline Configuration
+# This configuration demonstrates the new Zarr/Kerchunk processing capabilities
+
+pipeline:
+  name: "Zarr Climate Processing Pipeline"
+  description: "High-performance climate normals calculation using Zarr and Dask"
+  version: "1.0"
+  
+  # Global settings
+  settings:
+    use_zarr: true
+    use_kerchunk: true  # Use virtual references instead of copying data
+    enable_monitoring: true
+    progress_bar: true
+    
+  # Dask configuration
+  dask:
+    cluster_type: "local"  # local, slurm, kubernetes
+    n_workers: 4
+    threads_per_worker: 2
+    memory_limit: "8GB"
+    dashboard_port: 8787
+    adaptive_scaling: false
+    
+  # Processing stages
+  stages:
+    # Stage 1: Convert NetCDF to Zarr/Kerchunk
+    - name: "data_preparation"
+      description: "Convert NetCDF files to Zarr format or create Kerchunk references"
+      enabled: true
+      config:
+        # Input data configuration
+        input:
+          base_path: "/projects/CCDD/NEX-GDDP-CMIP6/NorESM2-LM"
+          file_pattern: "{variable}/**/*{scenario}*.nc"
+          variables: ["pr", "tas", "tasmax", "tasmin"]
+          scenarios: ["historical", "ssp245", "ssp585"]
+          
+        # Output configuration
+        output:
+          base_path: "./output/zarr_stores"
+          kerchunk_path: "./output/kerchunk_references"
+          catalog_path: "./output/zarr_catalog.json"
+          
+        # Processing options
+        options:
+          conversion_method: "kerchunk"  # "zarr" or "kerchunk"
+          chunk_size_mb: 128
+          compression: "zstd"
+          compression_level: 3
+          consolidate_metadata: true
+          
+          # Kerchunk-specific options
+          kerchunk:
+            inline_threshold: 100
+            combine_references: true
+            parallel_jobs: 8
+            
+          # Zarr-specific options
+          zarr:
+            chunks:
+              time: 365
+              lat: 100
+              lon: 100
+            encoding:
+              scale_factor: 0.01
+              add_offset: 0.0
+              _FillValue: -9999.0
+    
+    # Stage 2: Calculate Climate Normals using Zarr
+    - name: "climate_means_zarr"
+      description: "Calculate 30-year rolling normals using Zarr-backed processing"
+      enabled: true
+      depends_on: ["data_preparation"]
+      config:
+        # Input from previous stage
+        input:
+          zarr_catalog: "./output/zarr_catalog.json"
+          use_kerchunk: true
+          
+        # Output configuration
+        output:
+          base_path: "./output/zarr_normals"
+          format: "zarr"
+          multiscale: true  # Create multiple resolutions
+          scales: [1, 2, 4, 8]
+          
+        # Processing parameters
+        processing:
+          regions: ["CONUS", "Alaska", "Hawaii", "PRVI", "Guam"]
+          periods:
+            - name: "historical"
+              start_year: 1980
+              end_year: 2014
+              scenarios: ["historical"]
+            - name: "hybrid"
+              start_year: 2015
+              end_year: 2044
+              scenarios: ["historical", "ssp245"]
+            - name: "future"
+              start_year: 2045
+              end_year: 2100
+              scenarios: ["ssp245"]
+          
+          # Computation settings
+          window_size: 30
+          min_years: 25
+          chunk_strategy: "auto"  # auto, time, space
+          
+        # Resource allocation
+        resources:
+          max_workers: 4
+          memory_per_worker: "8GB"
+          scheduler: "distributed"
+          
+    # Stage 3: Export and Validation
+    - name: "export_validation"
+      description: "Export results and validate outputs"
+      enabled: true
+      depends_on: ["climate_means_zarr"]
+      config:
+        # Export options
+        export:
+          formats: ["netcdf", "csv", "parquet"]
+          include_metadata: true
+          compression: true
+          
+        # Validation checks
+        validation:
+          check_completeness: true
+          check_ranges: true
+          check_temporal_consistency: true
+          generate_report: true
+          report_path: "./output/validation/zarr_validation_report.html"
+          
+        # Benchmark comparison
+        benchmark:
+          enabled: true
+          compare_with: "original_netcdf"
+          metrics: ["processing_time", "memory_usage", "io_operations"]
+          output_path: "./output/benchmarks/zarr_performance.json"
+
+# Environment-specific overrides
+environments:
+  development:
+    pipeline:
+      dask:
+        n_workers: 2
+        memory_limit: "4GB"
+      stages:
+        - name: "data_preparation"
+          config:
+            input:
+              variables: ["tas"]  # Only temperature for testing
+              scenarios: ["historical"]
+            options:
+              parallel_jobs: 2
+              
+  production:
+    pipeline:
+      dask:
+        cluster_type: "slurm"
+        n_workers: 16
+        memory_limit: "16GB"
+        adaptive_scaling: true
+        min_workers: 4
+        max_workers: 32
+      stages:
+        - name: "climate_means_zarr"
+          config:
+            processing:
+              chunk_strategy: "time"  # Optimize for time-series operations
+            resources:
+              max_workers: 16
+              scheduler: "distributed"
+
+# Monitoring and logging
+monitoring:
+  performance_tracking:
+    enabled: true
+    metrics:
+      - "task_completion_time"
+      - "memory_usage"
+      - "disk_io"
+      - "network_io"
+    export_path: "./output/monitoring/performance_metrics.csv"
+    
+  logging:
+    level: "INFO"
+    handlers:
+      - type: "file"
+        path: "./logs/zarr_pipeline.log"
+      - type: "console"
+        format: "simple"
+    
+  alerts:
+    enabled: true
+    conditions:
+      - metric: "memory_usage"
+        threshold: 0.9
+        action: "warn"
+      - metric: "task_failure_rate"
+        threshold: 0.1
+        action: "error"
